@@ -1754,9 +1754,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const channelTaskRewardAXN = parseInt(getSetting('channel_task_reward', '30')); // Default 30 AXN per click
       const botTaskRewardAXN = parseInt(getSetting('bot_task_reward', '20')); // Default 20 AXN per click
       
-      // Minimum convert amount in AXN (10,000 AXN = 1 TON)
+      // Minimum convert amount in AXN (100,000 AXN = 1 TON)
       const minimumConvertAXN = parseInt(getSetting('minimum_convert_axn', '100')); // Default 100 AXN
-      const minimumConvertTON = minimumConvertAXN / 10000; 
+      const minimumConvertTON = minimumConvertAXN / 100000; 
       
       // Minimum clicks for task creation
       const minimumClicks = parseInt(getSetting('minimum_clicks', '100')); // Default 500 clicks
@@ -1786,8 +1786,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // BUG currency settings
       const minimumConvertAXNToTON = parseInt(getSetting('minimum_convert_axn_to_ton', '10000'));
       const minimumConvertAXNToBug = parseInt(getSetting('minimum_convert_axn_to_bug', '1000'));
-      // 10,000 AXN = 1 TON
-      const axnToTonRate = parseInt(getSetting('axn_to_ton_rate', '10000')); 
+      // 100,000 AXN = 1 TON
+      const axnToTonRate = parseInt(getSetting('axn_to_ton_rate', '100000')); 
       const axnToBugRate = parseInt(getSetting('axn_to_bug_rate', '1')); // 1 AXN = 1 BUG
       const bugRewardPerAd = parseInt(getSetting('bug_reward_per_ad', '1')); // BUG per ad watched
       const bugRewardPerTask = parseInt(getSetting('bug_reward_per_task', '10')); // BUG per task completed
@@ -5114,16 +5114,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let convertedAmount = 0;
         let convertedCurrency = convertTo;
         
-        if (convertTo === '') {
-          const conversionRateSetting = await storage.getAppSetting('pad_to_usd_rate', '10000');
+        if (convertTo === '' || convertTo === 'TON') {
+          const conversionRateSetting = await storage.getAppSetting('axn_to_ton_rate', '100000');
           const AXN_TO_TON_RATE = parseFloat(conversionRateSetting);
-          convertedAmount = convertAmount / AXN_TO_TON_RATE;
-          const currentUsdBalance = parseFloat(user.tonBalance || '0');
-          updateData.tonBalance = (currentUsdBalance + convertedAmount).toFixed(10);
-          console.log(`✅ AXN to TON: ${convertAmount} AXN → TON${convertedAmount.toFixed(4)} TON`);
-        } else if (convertTo === '') {
-          const padToTonRateSetting = await storage.getAppSetting('axn_to_ton_rate', '10000000');
-          const AXN_TO_TON_RATE = parseFloat(padToTonRateSetting);
           convertedAmount = convertAmount / AXN_TO_TON_RATE;
           const currentTonBalance = parseFloat(user.tonBalance || '0');
           updateData.tonBalance = (currentTonBalance + convertedAmount).toFixed(10);
@@ -5198,8 +5191,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Get conversion rate from admin settings (default: 10,000,000 AXN = 1 )
-      const conversionRateSetting = await storage.getAppSetting('axn_to_ton_rate', '10000000');
+      // Get conversion rate from admin settings (default: 100,000 AXN = 1 TON)
+      const conversionRateSetting = await storage.getAppSetting('axn_to_ton_rate', '100000');
       const AXN_TO_TON_RATE = parseFloat(conversionRateSetting);
       const tonAmount = convertAmount / AXN_TO_TON_RATE;
       

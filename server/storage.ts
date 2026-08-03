@@ -719,8 +719,8 @@ export class DatabaseStorage implements IStorage {
       return { success: false, message: "Insufficient AXN balance" };
     }
 
-    // 10,000 AXN = 1 TON
-    const tonAmount = axnAmount / 10000;
+    // 100,000 AXN = 1 TON
+    const tonAmount = axnAmount / 100000;
 
     await db.transaction(async (tx) => {
       // Deduct from walletBalance (Season 2 primary balance)
