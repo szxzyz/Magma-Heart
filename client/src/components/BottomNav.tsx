@@ -80,9 +80,9 @@ const MachineIcon = ({ active, c }: { active: boolean; c: string }) => (
 );
 
 const TABS = [
-  { id: "earn",    label: "Tasks",   path: "/earn",    },
   { id: "game",    label: "Home",    path: "/game",    },
   { id: "machine", label: "Machine", path: "/machine", },
+  { id: "earn",    label: "Task",    path: "/earn",    },
   { id: "friend",  label: "Friends", path: "/friend",  },
 ] as const;
 
