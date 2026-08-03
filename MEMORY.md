@@ -1,0 +1,1 @@
+- [TON Withdrawal Lessons](ton-withdrawal-lessons.md) — treasury=WalletV5R1, createTransfer returns body only (needs external() wrap), use tonapi.io for all ops to avoid TONCenter rate limits.

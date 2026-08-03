@@ -1,0 +1,151 @@
+# Axionet - CIPHER Earning Platform
+
+## Overview
+Axionet is a Telegram-based CIPHER earning platform. Users earn CIPHER by watching ads, completing tasks, farming, daily check-ins, mystery box, and referring friends. Users withdraw AXN (wallet balance) through the platform. Two currencies in use: CIPHER (earned via ads/tasks, stored in `balance`) and AXN (wallet balance, stored in `wallet_balance`).
+
+## User Preferences
+- Task type icons should be small and compact (w-4 h-4 with p-2.5 padding)
+- Icon-only display for task categories (no text labels)
+
+## System Architecture
+
+### UI/UX Decisions
+- **Iconography**: Uses `lucide-react` for a professional icon set.
+- **Navigation**: 2-item bottom nav (Home, Profile). Invite Friends accessible via the UserPlus button in the top-right header.
+- **Component Design**: Leverages shadcn/ui and Tailwind CSS for consistent styling, including gradient effects for toggles.
+- **Input Handling**: Supports decimal inputs for financial transactions with 2-decimal display formatting.
+- **Validation**: Provides real-time client-side validation and clear error messages.
+- **Responsive Design**: Fixed 16px base font size, `viewport-fit=cover`, device-specific padding, custom fixed sizing classes, safe area support, and touch optimization for consistent mobile experience.
+
+### Technical Implementations
+- **Stack**: React, TypeScript, Vite (frontend); Express.js, Node.js (backend); PostgreSQL with Drizzle ORM (database).
+- **Authentication**: Telegram WebApp Authentication.
+- **No Mining Machine**: The old AXN Mining Machine system (levels 1–25, CPU start, antivirus, health, energy) has been fully removed. Do NOT add it back.
+- **Currency**: Two currencies — CIPHER (earning currency, `balance` field) and AXN (wallet/withdrawal currency, `wallet_balance` field). No BTC, SAT, Satoshi, or Lightning Sats references anywhere in the UI.
+- **Branding**: App uses AXN logo (public/axn-logo.svg) — futuristic, no text, no Bitcoin symbol. Loading screen shows only the logo + bouncing dots, no app name text.
+- **Notification UI**: Black background (#0a0a0a), silver/light gray text (#c8c8c8), colored accent border per type.
+- **Referral System**: Users invite friends and earn CIPHER from their activity. No mining speed boost — referral boost system is removed. Invite popup accessible via header button.
+- **Withdrawal System**: Direct AXN withdrawals. Minimum 20 AXN, with configurable fee. Balance deducted from `balance` field on admin approval. Admin can approve/reject with automatic balance deduction/refund.
+- **ArcPay Integration**: Full integration for PDZ top-ups, including secure API credential handling, retry logic, and a webhook for payment notifications.
+- **Earning Mechanics**:
+  - **Ads (Earn page)**: Monetag (+10 CIPHER, 50/day), Adgram (+10 CIPHER, 10/day), Gigapub (+10 CIPHER, 30/day)
+  - **Special Task**: Add `$AXN` to Telegram name — one-time +50 CIPHER reward
+  - **Farming (Games page)**: Simple farming at 0.001 CIPHER/s, 4-hour session, claim anytime via `/api/farming/start` and `/api/farming/claim`
+  - **Daily Check-in (Games page)**: +5 CIPHER per day, requires watching a rewarded ad
+  - **Mystery Box (Games page)**: Win 1–100 CIPHER daily, requires watching a rewarded ad
+  - **Promo Codes (Games page)**: Admin issues promo codes, users redeem for bonus CIPHER
+  - **Referral (Friend page)**: Invite friends, earn CIPHER from their activity
+- **Data Persistence**: Employs a dual storage strategy (IndexedDB primary, localStorage fallback) with a custom `PersistentStorage` class for robust data saving, auto-sync, and fallback handling.
+- **Mandatory Channel & Group Join Security**: Locks app access until users join specified Telegram channel and group, verified in real-time on every app launch.
+- **Ad Watch System**: Three providers — Monetag (50/day), Adgram (10/day), Gigapub (30/day). Each gives +10 CIPHER. Daily limits reset at UTC midnight, tracked via `ad_slot_cooldowns` table and localStorage.
+- **Ad Requirements**: Rewarded interstitial ad required before Daily Check-in and Mystery Box claim.
+- **Native Share Dialog**: Utilizes Telegram's `shareMessage()` API for rich, native sharing experiences, with fallbacks.
+
+### Feature Specifications
+- **Top-Up PDZ**: `/topup-pdz` route with ArcPay, minimum 0.1 .
+- **Withdrawal Toggle**: Custom grid toggle for "Withdraw" and "Wallet Setup".
+- **Health Check**: `/api/health` endpoint for system diagnostics.
+- **Task Category System (Earn page)**: Two tabs — "Active" (ads + special tasks) and "Partner" (coming soon).
+- **Games Page**: Contains Wallet Balance display (AXN + TON + USD equivalent), action buttons (Withdraw, Swap, Staking, Promo), Daily Rewards section (Check-in, Mystery Box), and Farming section.
+- **Withdrawal Requirements**: Admin-controlled, with dynamic error messages.
+- **Partner Tasks**: Coming soon — currently shows placeholder.
+
+### System Design Choices
+- **Configuration**: Environment variable-driven for all sensitive credentials.
+- **Development Workflow**: Vite dev server with Express backend, Replit PostgreSQL for database.
+- **Security**: No hardcoded secrets, server-side private keys, backend-only API key usage.
+- **Auto-Ban System**: Detects suspicious multi-account activity (device ID, IP, fingerprint, self-referral), logs ban history, and provides admin controls for management and unban.
+
+## External Dependencies
+- **PostgreSQL**: Main database, managed by Drizzle ORM.
+- **Telegram WebApp Auth**: For user authentication.
+- **ArcPay Payment Gateway**: For PDZ token top-ups and payment processing.
+- **lucide-react**: Icon library.
+- **shadcn/ui**: UI component library.
+- **Tailwind CSS**: Styling framework.
+
+## Recent Changes
+
+### March 2026 - Send & Receive SAT System + Home Button Redesign
+- **4-Button Action Row**: Replaced the 2-button grid (Withdraw, Promo) with a 4-button row in order: Send, Withdraw, Promo, Receive. Each button has an icon and label in a small rounded card matching the dark theme.
+- **Send SAT Feature**: Users can send SAT to other users internally. Send popup allows entering Recipient ID / Username, Amount, and optional Note. Balance is deducted from sender and added to receiver atomically.
+- **Receive SAT Feature**: Receive popup shows the user's ID and username with copy buttons. Includes a message guiding users to share their ID.
+- **sat_transfers table**: New database table stores all SAT transfers with sender_id, receiver_id, amount, note, and created_at.
+- **API Endpoints**:
+  - `POST /api/transfers/send` - Sends SAT from authenticated user to recipient (by ID, username, or telegram_id)
+  - `GET /api/users/lookup?q=...` - Looks up a user by ID or username
+  - `GET /api/transactions` - Now includes sentTransfers and receivedTransfers in response
+- **Transaction History**: All send/receive actions appear in the Transactions overlay with distinct icons and colors (orange for sent, emerald for received). Notes are displayed inline.
+
+
+
+### December 19, 2024 - Task Verification and Claim System Fixes
+- **Channel/Group Join Task Verification**: Added Telegram bot verification to `/api/tasks/complete/channel` and `/api/tasks/complete/community` endpoints. Users must now verify they joined the channel/group before receiving the reward.
+- **Advertiser Task Claim System**: Modified advertiser tasks to require explicit claim step:
+  - `/api/advertiser-tasks/:taskId/click` now only records the click without giving reward (shows "Task started! Click the claim button to earn your reward.")
+  - New endpoint `/api/advertiser-tasks/:taskId/claim` for users to claim their earned reward after completing the task
+  - Task clicks stored with `claimedAt` field to track claim status
+  - Prevents auto-reward and ensures user intentionally claims after task completion
+
+### December 2024 - Withdrawal Approval Bug Fix
+- **Fixed "Insufficient  balance" error during admin approval**: Previously, balance was incorrectly deducted at withdrawal request time AND checked again during approval, causing approval to fail.
+- **Correct withdrawal flow now implemented**:
+  1. On withdrawal REQUEST: Only validates balance (checks if sufficient funds exist), does NOT deduct balance
+  2. On admin APPROVAL: Deducts both  and BUG balance from user account
+  3. On admin REJECTION: Balance remains unchanged (since it was never deducted)
+- **Balance integrity**: User balance stays unchanged while withdrawal status is PENDING; balance is only deducted when admin approves
+- **Legacy withdrawal support**: Handles withdrawals created before this fix (where balance was already deducted at request time):
+  - APPROVAL: Detects legacy withdrawals (insufficient balance) and approves without deducting again
+  - REJECTION: Automatically refunds the balance that was deducted at request time
+- **Files modified**: `server/routes.ts` (removed balance deduction from request creation), `server/storage.ts` (approveWithdrawal and rejectWithdrawal now handle both new and legacy flows)
+
+### December 2024 - Telegram Bot Notification Fixes
+- **Referral Notification**: Only ONE message sent on FIRST AD with  reward from Admin Settings (uses `firstAdWatched` flag to prevent duplicate notifications)
+- **Commission Notification Removed**: Disabled spam notification on every ad watch - referral commission is still awarded but no Telegram notification is sent
+- **Ban Message Fix**: Telegram bot ban message uses inline button "Contact Support" pointing to https://t.me/PaidAdzGroup (no plain text URL)
+- **BanScreen Component**: Updated to redirect to https://t.me/PaidAdzGroup instead of PaidAdsCommunity
+- **Payout Approved Message**: Uses "Share in Group" inline button pointing to https://t.me/PaidAdzGroup
+- **Affiliate Page  Balance**: Calculates totalUsdEarned as successfulInvitesCount * referralReward from admin settings (accurate real-time calculation)
+- **Group Notification for Withdrawals**: Sends notification to PaidAdzGroup (chat ID: -1003402950172) with exact same format as admin notification when withdrawal request is created
+
+### December 2024 - Country Blocking System Fix
+- **Complete country blocking system**: Server-side middleware blocks users from restricted countries before serving the app.
+- **Admin panel improvements**: CountryControls.tsx now displays admin's current country/IP and has working toggle buttons.
+- **API endpoints**: 
+  - `GET /api/countries` - List all countries
+  - `GET /api/blocked` - List blocked country codes
+  - `GET /api/user-info` - Get user's IP and detected country
+  - `POST /api/block-country` - Block a country (admin only)
+  - `POST /api/unblock-country` - Unblock a country (admin only)
+- **Middleware flow**: IP detection via x-forwarded-for → ip-api.com lookup → database check → block with HTML page or allow.
+- **Database table**: `blocked_countries` stores blocked country codes.
+
+### December 2024 - Referral Notification System Fix
+- **Added missing notification functions**: Implemented `sendReferralRewardNotification` and `sendReferralCommissionNotification` in telegram.ts.
+- **Referral activation notifications**: Referrers now receive Telegram notifications when their invited friends watch their first ad.
+- **HTML escaping**: All user-provided names are properly sanitized before being included in notification messages to prevent Telegram parsing errors.
+- **Notification format**: "New Referral Activity! Your friend watched their first ad. You earned X Hrum."
+
+### December 2024 - Real-time  Balance Updates
+- **Instant  Balance Sync**: Implemented WebSocket-based real-time updates for  top-ups.
+- **Backend**: Added `sendRealtimeUpdate` call in ArcPay webhook handler to push new balance to the user.
+- **Frontend**: Updated `useWebSocket` hook to handle `balance_update` messages, directly updating the React Query cache and invalidating user data for instant UI reflection.
+- **UI Consistency**:  Wallet Setup dialog updated to match Promo Popup design pattern (spacing, theme, buttons).
+
+## Development Setup
+
+### Running the Application
+```bash
+npm install
+npm run dev
+```
+
+### Environment Variables Required
+- `DATABASE_URL`: PostgreSQL connection string
+- `TELEGRAM_BOT_TOKEN`: For Telegram bot functionality
+- `SESSION_SECRET`: For session management
+- `TELEGRAM_ADMIN_ID`: Admin user's Telegram ID
+
+### Port Configuration
+- Frontend/Backend: Port 5000 (combined server)
+- WebSocket: `/ws` endpoint on same port

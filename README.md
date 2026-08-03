@@ -1,1 +1,1 @@
-# Magma-Heart
+# Mining
