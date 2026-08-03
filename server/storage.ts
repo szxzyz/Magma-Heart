@@ -172,7 +172,6 @@ export interface IStorage {
     hourlyAxn: number;
     dailyAxn: number;
     unclaimedAxn: number;
-    gramBalance: number;
   }>;
 }
 
@@ -2915,22 +2914,22 @@ export class DatabaseStorage implements IStorage {
       // Atomic deduction: only succeeds if balance >= price (no concurrent oversell)
       const deductResult = await client.query(
         `UPDATE users
-         SET wallet_balance = wallet_balance::numeric - $1,
-             updated_at     = NOW()
+         SET balance    = COALESCE(balance::numeric, 0) - $1,
+             updated_at = NOW()
          WHERE id = $2
-           AND wallet_balance::numeric >= $1
-         RETURNING wallet_balance`,
-        [machineType.priceAxn, userId]
+           AND COALESCE(balance::numeric, 0) >= $1
+         RETURNING balance`,
+        [machineType.priceCipher, userId]
       );
 
       if (deductResult.rows.length === 0) {
         await client.query('ROLLBACK');
         // Fetch current balance only to give a helpful error message
-        const balRow = await pool.query('SELECT wallet_balance FROM users WHERE id = $1', [userId]);
-        const have = Math.floor(parseFloat(balRow.rows[0]?.wallet_balance || '0'));
+        const balRow = await pool.query('SELECT balance FROM users WHERE id = $1', [userId]);
+        const have = Math.floor(parseFloat(balRow.rows[0]?.balance || '0'));
         return {
           success: false,
-          message: `Insufficient AXN balance. Need ${machineType.priceAxn.toLocaleString()} AXN, have ${have.toLocaleString()} AXN`,
+          message: `Insufficient CIPHER balance. Need ${machineType.priceCipher.toLocaleString()} CIPHER, have ${have.toLocaleString()} CIPHER`,
         };
       }
 
@@ -3053,15 +3052,8 @@ export class DatabaseStorage implements IStorage {
     hourlyAxn: number;
     dailyAxn: number;
     unclaimedAxn: number;
-    gramBalance: number;
   }> {
-    const [machinesResult, userResult] = await Promise.all([
-      db.select().from(userMachines).where(eq(userMachines.userId, userId)),
-      db.select({ walletBalance: users.walletBalance }).from(users).where(eq(users.id, userId)),
-    ]);
-
-    const walletBalance = parseFloat(userResult[0]?.walletBalance?.toString() || '0');
-    const gramBalance   = walletBalance / 100_000;
+    const machinesResult = await db.select().from(userMachines).where(eq(userMachines.userId, userId));
 
     const now = new Date();
     let hourlyAxn     = 0;
@@ -3098,7 +3090,6 @@ export class DatabaseStorage implements IStorage {
       hourlyAxn:    Math.round(hourlyAxn * 100) / 100,
       dailyAxn:     Math.round(dailyAxn  * 100) / 100,
       unclaimedAxn,
-      gramBalance:  Math.round(gramBalance * 10_000) / 10_000,
     };
   }
 }

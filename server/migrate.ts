@@ -177,6 +177,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS extra_ads_watched_today INTEGER DEFAULT 0`);
       await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_extra_ad_date TIMESTAMP`);
       await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS mystery_box_date TIMESTAMP`);
+      await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS mystery_box_count INTEGER DEFAULT 0`);
       
       // Add auto-ban system columns
       await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS app_version TEXT`);
@@ -650,6 +651,23 @@ export async function ensureDatabaseSchema(): Promise<void> {
     `);
     console.log('✅ [MIGRATION] bounty_tasks table ensured');
 
+    // One-time backfill: standardize existing partner task rewards at 200 CIPHER.
+    // Guarded by an admin_settings flag so it never re-runs and admin edits stay intact.
+    try {
+      const backfillFlag = await db.execute(sql`
+        INSERT INTO admin_settings (setting_key, setting_value, description)
+        VALUES ('partner_reward_200_backfill', 'done', 'One-time backfill of partner task rewards to 200 CIPHER')
+        ON CONFLICT (setting_key) DO NOTHING
+        RETURNING setting_key
+      `);
+      if ((backfillFlag as any).rows?.length > 0) {
+        await db.execute(sql`UPDATE bounty_tasks SET reward_axn = 200`);
+        console.log('✅ [MIGRATION] Partner task rewards backfilled to 200 CIPHER (one-time)');
+      }
+    } catch (e) {
+      console.warn('⚠️ [MIGRATION] Partner reward backfill skipped:', e);
+    }
+
     // Bounty task completions table
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS bounty_task_completions (
@@ -831,6 +849,22 @@ export async function ensureDatabaseSchema(): Promise<void> {
     } catch (e) {
       console.log('ℹ️ [MIGRATION] Partner task cleanup skipped:', e);
     }
+
+    // User machines table (passive GRAM/AXN earning machines)
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS user_machines (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id),
+        machine_type VARCHAR(50) NOT NULL,
+        purchased_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP NOT NULL,
+        last_claimed_at TIMESTAMP DEFAULT NOW(),
+        total_claimed_axn NUMERIC(30,4) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_user_machines_user_id ON user_machines(user_id)`);
+    console.log('✅ [MIGRATION] user_machines table ensured');
 
     console.log('✅ [MIGRATION] All tables and indexes created successfully');
     

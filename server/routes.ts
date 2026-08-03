@@ -741,34 +741,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/daily-checkin — claim 5 AXN daily bonus
+  // POST /api/daily-checkin — claim 100 CIPHER daily bonus
   app.post('/api/daily-checkin', authenticateTelegram, async (req: any, res) => {
     try {
       const user = req.user.user;
       const { pool: dbPool } = await import('./db');
       const todayKey = new Date().toISOString().slice(0, 10);
-      const userRow = await dbPool.query(
-        `SELECT daily_tasks_date, daily_checkin_claimed FROM users WHERE id = $1`,
-        [user.id]
+      const reward = 100;
+
+      // Single atomic conditional UPDATE: prevents concurrent double-claims.
+      const result = await dbPool.query(
+        `UPDATE users
+         SET daily_tasks_date = CASE
+               WHEN daily_tasks_date IS NOT NULL AND daily_tasks_date::date = ($1)::date
+                 THEN daily_tasks_date
+               ELSE NOW()
+             END,
+             daily_checkin_claimed = TRUE,
+             balance = COALESCE(balance::numeric, 0) + $2
+         WHERE id = $3
+           AND NOT (
+             daily_tasks_date IS NOT NULL
+             AND daily_tasks_date::date = ($1)::date
+             AND daily_checkin_claimed = TRUE
+           )
+         RETURNING id`,
+        [todayKey, reward, user.id]
       );
-      const row = userRow.rows[0];
-      const lastDate = row?.daily_tasks_date ? new Date(row.daily_tasks_date).toISOString().slice(0, 10) : null;
 
-      if (lastDate === todayKey && row?.daily_checkin_claimed) {
+      if (result.rows.length === 0) {
         return res.status(400).json({ success: false, message: 'Already claimed today' });
-      }
-
-      const reward = 5;
-      if (lastDate !== todayKey) {
-        await dbPool.query(
-          `UPDATE users SET daily_tasks_date = NOW(), daily_checkin_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + $1 WHERE id = $2`,
-          [reward, user.id]
-        );
-      } else {
-        await dbPool.query(
-          `UPDATE users SET daily_checkin_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + $1 WHERE id = $2`,
-          [reward, user.id]
-        );
       }
 
       res.json({ success: true, reward, message: `Daily check-in! +${reward} CIPHER` });
@@ -778,32 +780,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/mystery-box — claim random AXN (1–100) once per day
+  // POST /api/mystery-box — claim random CIPHER (1–1000), up to 5 times per day
   app.post('/api/mystery-box', authenticateTelegram, async (req: any, res) => {
     try {
       const user = req.user.user;
       const { pool: dbPool } = await import('./db');
       const todayKey = new Date().toISOString().slice(0, 10);
+      const DAILY_LIMIT = 5;
 
-      const userRow = await dbPool.query(
-        `SELECT mystery_box_date FROM users WHERE id = $1`,
-        [user.id]
+      const reward = Math.floor(Math.random() * 1000) + 1;
+
+      // Single atomic conditional UPDATE: enforces the daily limit and increments
+      // the counter in one statement, so concurrent requests cannot exceed 5/day.
+      const result = await dbPool.query(
+        `UPDATE users
+         SET mystery_box_count = CASE
+               WHEN mystery_box_date IS NOT NULL AND mystery_box_date::date = ($1)::date
+                 THEN COALESCE(mystery_box_count, 0) + 1
+               ELSE 1
+             END,
+             mystery_box_date = NOW(),
+             balance = COALESCE(balance::numeric, 0) + $2
+         WHERE id = $3
+           AND (
+             mystery_box_date IS NULL
+             OR mystery_box_date::date <> ($1)::date
+             OR COALESCE(mystery_box_count, 0) < $4
+           )
+         RETURNING mystery_box_count`,
+        [todayKey, reward, user.id, DAILY_LIMIT]
       );
-      const row = userRow.rows[0];
-      const lastDate = row?.mystery_box_date ? new Date(row.mystery_box_date).toISOString().slice(0, 10) : null;
 
-      if (lastDate === todayKey) {
-        return res.status(400).json({ success: false, message: 'Mystery box already opened today' });
+      if (result.rows.length === 0) {
+        return res.status(400).json({ success: false, message: 'Daily limit reached (5 mystery gifts per day)' });
       }
 
-      const reward = Math.floor(Math.random() * 100) + 1;
+      const newCount = result.rows[0].mystery_box_count;
 
-      await dbPool.query(
-        `UPDATE users SET mystery_box_date = NOW(), balance = COALESCE(balance::numeric, 0) + $1 WHERE id = $2`,
-        [reward, user.id]
-      );
-
-      res.json({ success: true, reward, message: `You won ${reward} CIPHER from the mystery box!` });
+      res.json({
+        success: true,
+        reward,
+        claimsToday: newCount,
+        remaining: Math.max(0, DAILY_LIMIT - newCount),
+        message: `You won ${reward} CIPHER from the mystery gift!`,
+      });
     } catch (error) {
       console.error('Mystery box error:', error);
       res.status(500).json({ success: false, message: 'Failed to open mystery box' });
@@ -8728,7 +8748,7 @@ ${walletAddress}
       try {
         await pool.query(`UPDATE users SET balance = COALESCE(balance::numeric, 0) - $1 WHERE id = $2`, [totalCost, userId]);
         const ins = await pool.query(
-          `INSERT INTO user_tasks (user_id, title, link, category, impressions, reward_per_completion, total_cost, status) VALUES ($1,$2,$3,$4,$5,10,$6,'pending') RETURNING id`,
+          `INSERT INTO user_tasks (user_id, title, link, category, impressions, reward_per_completion, total_cost, status) VALUES ($1,$2,$3,$4,$5,100,$6,'pending') RETURNING id`,
           [userId, title.slice(0, 100), link.slice(0, 500), category, imp, totalCost]
         );
         newTaskId = ins.rows[0].id;
@@ -9024,11 +9044,12 @@ ${walletAddress}
       if (!telegramUser || !isAdmin(telegramUser.id.toString())) {
         return res.status(403).json({ message: 'Forbidden' });
       }
-      const { title, description, url, rewardAxn, totalImpressions } = req.body;
-      if (!title || !rewardAxn) return res.status(400).json({ message: 'Title and reward required' });
+      const { title, totalImpressions } = req.body;
+      const { description, url } = req.body;
+      if (!title) return res.status(400).json({ message: 'Title required' });
       const { pool } = await import('./db');
       const imp = parseInt(totalImpressions || '0', 10);
-      const reward = parseInt(rewardAxn, 10);
+      const reward = 200; // Partner tasks pay a fixed 200 CIPHER
       await pool.query(
         `INSERT INTO bounty_tasks (title, description, url, reward_axn, key_cost, total_impressions, is_active) VALUES ($1,$2,$3,$4,0,$5,TRUE)`,
         [title.slice(0, 100), (description || '').slice(0, 300), url || '', reward, imp]
