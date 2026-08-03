@@ -273,6 +273,22 @@ export const userFarming = pgTable("user_farming", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// User machines table (passive GRAM/AXN earning machines)
+export const userMachines = pgTable("user_machines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  machineType: varchar("machine_type", { length: 50 }).notNull(),
+  purchasedAt: timestamp("purchased_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  lastClaimedAt: timestamp("last_claimed_at").defaultNow(),
+  totalClaimedAxn: decimal("total_claimed_axn", { precision: 30, scale: 4 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserMachineSchema = createInsertSchema(userMachines).omit({ id: true, createdAt: true });
+export type UserMachine = typeof userMachines.$inferSelect;
+export type InsertUserMachine = typeof userMachines.$inferInsert;
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertEarningSchema = createInsertSchema(earnings).omit({ createdAt: true });
