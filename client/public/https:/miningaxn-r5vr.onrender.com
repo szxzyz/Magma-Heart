@@ -1,0 +1,5 @@
+{
+  "url": "https://axionet.duckdns.org",
+  "name": "Axionet",
+  "iconUrl": "https://axionet.duckdns.org/axn-coin-new.png"
+}
