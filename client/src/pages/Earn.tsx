@@ -283,7 +283,7 @@ function UserTaskRow({ task }: { task: any }) {
         showNotification(`+${task.reward_per_completion} CIPHER earned!`, 'success');
         queryClient.setQueryData(['/api/auth/user'], (old: any) => {
           if (!old) return old;
-          return { ...old, balance: String(Math.floor(parseFloat(old.balance || '0') + (task.reward_per_completion || 10))) };
+          return { ...old, balance: String(Math.floor(parseFloat(old.balance || '0') + (task.reward_per_completion || 100))) };
         });
         queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         queryClient.invalidateQueries({ queryKey: ['/api/user-tasks'] });

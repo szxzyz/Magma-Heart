@@ -38,7 +38,9 @@ export default function Games() {
   const [showSwapPopup, setShowSwapPopup] = useState(false);
   const [dailyChecked, setDailyChecked] = useState(() => localStorage.getItem('daily_check_date') === getTodayKey());
   const [dailyAdLoading, setDailyAdLoading] = useState(false);
-  const [mysteryOpened, setMysteryOpened] = useState(() => localStorage.getItem('mystery_box_date') === getTodayKey());
+  const [mysteryClaimsToday, setMysteryClaimsToday] = useState(0);
+  const MYSTERY_DAILY_LIMIT = 5;
+  const mysteryOpened = mysteryClaimsToday >= MYSTERY_DAILY_LIMIT;
 
   const [mysteryPhase, setMysteryPhase] = useState<MysteryPhase>('idle');
   const [mysteryReward, setMysteryReward] = useState(0);
@@ -109,16 +111,9 @@ export default function Games() {
     }
     if (user.mysteryBoxDate) {
       const serverDate = new Date(user.mysteryBoxDate).toISOString().slice(0, 10);
-      if (serverDate === todayKey) {
-        setMysteryOpened(true);
-        localStorage.setItem('mystery_box_date', todayKey);
-      } else {
-        setMysteryOpened(false);
-        localStorage.removeItem('mystery_box_date');
-      }
+      setMysteryClaimsToday(serverDate === todayKey ? (user.mysteryBoxCount ?? 0) : 0);
     } else {
-      setMysteryOpened(false);
-      localStorage.removeItem('mystery_box_date');
+      setMysteryClaimsToday(0);
     }
   }, [user]);
 
@@ -132,7 +127,7 @@ export default function Games() {
     onSuccess: (data) => {
       setDailyChecked(true);
       localStorage.setItem('daily_check_date', getTodayKey());
-      showNotification(`Daily check-in done! +${data.reward ?? 5} CIPHER added`, 'success');
+      showNotification(`Daily check-in done! +${data.reward ?? 100} CIPHER added`, 'success');
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
     },
     onError: (err: any) => {
@@ -154,6 +149,8 @@ export default function Games() {
     if (mysteryTimerRef.current) clearTimeout(mysteryTimerRef.current);
 
     let serverReward = 0;
+    // Unlock requires watching 2 ads
+    try { await showRewardedInterstitial(); } catch {}
     try { await showRewardedInterstitial(); } catch {}
     try {
       const res = await apiRequest('POST', '/api/mystery-box', {});
@@ -161,7 +158,7 @@ export default function Games() {
       if (!res.ok) throw new Error(data.message || 'Failed');
       serverReward = data.reward ?? 0;
       setMysteryReward(serverReward);
-      localStorage.setItem('mystery_box_date', getTodayKey());
+      if (typeof data.claimsToday === 'number') setMysteryClaimsToday(data.claimsToday);
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
     } catch (err: any) {
       setMysteryPhase('idle');
@@ -176,8 +173,7 @@ export default function Games() {
 
   const handleMysteryClaim = () => {
     if (mysteryPhase !== 'revealed') return;
-    setMysteryOpened(true);
-    showNotification(`Mystery Box! You won ${mysteryReward} CIPHER!`, 'success');
+    showNotification(`Mystery Gift! You won ${mysteryReward} CIPHER!`, 'success');
     setMysteryPhase('done');
     mysteryTimerRef.current = setTimeout(() => setMysteryPhase('idle'), 1800);
   };
@@ -428,7 +424,7 @@ export default function Games() {
             </svg>
             <div style={{ flex: 1 }}>
               <div style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>Daily Check-In</div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>Earn 5 CIPHER</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>Earn 100 CIPHER</div>
             </div>
             <button
               onClick={handleDailyCheck}
@@ -461,8 +457,10 @@ export default function Games() {
               <line x1="12" y1="22.08" x2="12" y2="12"/>
             </svg>
             <div style={{ flex: 1 }}>
-              <div style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>Mystery Box</div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>Win 1–100 CIPHER</div>
+              <div style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>Mystery Gift</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>
+                Win 1–1000 CIPHER · Watch 2 ads · {Math.max(0, MYSTERY_DAILY_LIMIT - mysteryClaimsToday)}/{MYSTERY_DAILY_LIMIT} left today
+              </div>
             </div>
             <button
               onClick={handleMysteryOpen}
