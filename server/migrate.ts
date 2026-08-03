@@ -714,6 +714,23 @@ export async function ensureDatabaseSchema(): Promise<void> {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Defensive: if promo_codes already existed from an older schema (e.g. missing/renamed
+    // the code column), CREATE TABLE IF NOT EXISTS above is a no-op, so ensure columns exist here.
+    try {
+      await db.execute(sql`ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS code VARCHAR(60)`);
+      await db.execute(sql`ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS reward_amount NUMERIC(20,2) NOT NULL DEFAULT 0`);
+      await db.execute(sql`ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS reward_type VARCHAR(10) DEFAULT 'AXN'`);
+      await db.execute(sql`ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS usage_limit INTEGER`);
+      await db.execute(sql`ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS per_user_limit INTEGER DEFAULT 1`);
+      await db.execute(sql`ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS use_count INTEGER DEFAULT 0`);
+      await db.execute(sql`ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
+      await db.execute(sql`ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`);
+      // Backfill any NULL codes so the unique index/constraint can be created safely
+      await db.execute(sql`UPDATE promo_codes SET code = 'LEGACY' || id WHERE code IS NULL`);
+      console.log('✅ [MIGRATION] promo_codes columns ensured (legacy table compatibility)');
+    } catch (e) {
+      console.log('ℹ️ [MIGRATION] promo_codes column backfill note:', e);
+    }
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_promo_codes_code ON promo_codes(code)`);
 
     await db.execute(sql`
