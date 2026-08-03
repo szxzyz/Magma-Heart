@@ -60,10 +60,30 @@ const FriendsIcon = ({ active, c }: { active: boolean; c: string }) => (
   </svg>
 );
 
+const MachineIcon = ({ active, c }: { active: boolean; c: string }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    {active ? (
+      <>
+        <rect x="2" y="7" width="20" height="14" rx="2" fill={c} opacity="0.15" stroke={c} strokeWidth="1.8"/>
+        <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" stroke={c} strokeWidth="1.8" strokeLinecap="round"/>
+        <circle cx="12" cy="14" r="2" fill={c}/>
+        <path d="M12 12v-1M12 16v1M10.27 13l-.87-.5M13.73 15l.87.5M10.27 15l-.87.5M13.73 13l.87-.5" stroke={c} strokeWidth="1.5" strokeLinecap="round"/>
+      </>
+    ) : (
+      <>
+        <rect x="2" y="7" width="20" height="14" rx="2" stroke={c} strokeWidth="1.8"/>
+        <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" stroke={c} strokeWidth="1.8" strokeLinecap="round"/>
+        <circle cx="12" cy="14" r="2" stroke={c} strokeWidth="1.5"/>
+      </>
+    )}
+  </svg>
+);
+
 const TABS = [
-  { id: "earn",   label: "Tasks",   path: "/earn",   },
-  { id: "game",   label: "Home",    path: "/game",   },
-  { id: "friend", label: "Friends", path: "/friend", },
+  { id: "earn",    label: "Tasks",   path: "/earn",    },
+  { id: "game",    label: "Home",    path: "/game",    },
+  { id: "machine", label: "Machine", path: "/machine", },
+  { id: "friend",  label: "Friends", path: "/friend",  },
 ] as const;
 
 export default function BottomNav() {
@@ -74,13 +94,11 @@ export default function BottomNav() {
   useEffect(() => {
     async function fetchBadge() {
       try {
-        // First check cached user data for instant render
         const cachedUser = queryClient.getQueryData<any>(['/api/auth/user']);
         const axnClaimed = cachedUser?.axnNameRewardClaimed ?? true;
         const quickCount = axnClaimed ? 0 : 1;
         if (quickCount > 0) setBadgeCount(quickCount);
 
-        // Then fetch the full count from server
         const res = await fetch('/api/tasks/badge-count', { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
@@ -136,9 +154,10 @@ export default function BottomNav() {
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 40, height: 30, position: "relative",
             }}>
-              {tab.id === "game"   && <HomeIcon    active={on} c={c} />}
-              {tab.id === "earn"   && <TasksIcon   active={on} c={c} />}
-              {tab.id === "friend" && <FriendsIcon active={on} c={c} />}
+              {tab.id === "game"    && <HomeIcon    active={on} c={c} />}
+              {tab.id === "earn"    && <TasksIcon   active={on} c={c} />}
+              {tab.id === "friend"  && <FriendsIcon active={on} c={c} />}
+              {tab.id === "machine" && <MachineIcon active={on} c={c} />}
 
               {showBadge && (
                 <div style={{
