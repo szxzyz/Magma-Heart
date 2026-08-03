@@ -741,6 +741,16 @@ export async function ensureDatabaseSchema(): Promise<void> {
         used_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Defensive: same legacy-table issue as promo_codes above — if promo_code_usage
+    // already existed (e.g. old schema with promo_code_id instead of code), ensure column exists.
+    try {
+      await db.execute(sql`ALTER TABLE promo_code_usage ADD COLUMN IF NOT EXISTS code VARCHAR(60)`);
+      await db.execute(sql`UPDATE promo_code_usage SET code = 'LEGACY' || id WHERE code IS NULL`);
+      await db.execute(sql`ALTER TABLE promo_code_usage ALTER COLUMN code SET NOT NULL`);
+      console.log('✅ [MIGRATION] promo_code_usage columns ensured (legacy table compatibility)');
+    } catch (e) {
+      console.log('ℹ️ [MIGRATION] promo_code_usage column backfill note:', e);
+    }
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_promo_usage_code_user ON promo_code_usage(code, user_id)`);
     console.log('✅ [MIGRATION] promo_codes and promo_code_usage tables ensured');
 
