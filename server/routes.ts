@@ -1125,6 +1125,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================
+  // MACHINE ROUTES
+  // ============================================================
+
+  app.get("/api/machines", authenticateTelegram, async (req: any, res) => {
+    try {
+      const user = req.user?.user;
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+      const machines = await storage.getUserMachines(user.id);
+      const stats = await storage.getMachineStats(user.id);
+      res.json({ machines, stats });
+    } catch (error) {
+      console.error("Machines fetch error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/machines/buy", authenticateTelegram, async (req: any, res) => {
+    try {
+      const user = req.user?.user;
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+      const { machineType } = req.body;
+      if (!machineType) return res.status(400).json({ message: "machineType is required" });
+      const result = await storage.purchaseMachine(user.id, machineType);
+      if (!result.success) return res.status(400).json(result);
+      res.json(result);
+    } catch (error) {
+      console.error("Machine purchase error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/machines/claim", authenticateTelegram, async (req: any, res) => {
+    try {
+      const user = req.user?.user;
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+      const result = await storage.claimMachineRewards(user.id);
+      if (!result.success) return res.status(400).json(result);
+      res.json(result);
+    } catch (error) {
+      console.error("Machine claim error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ─── Ad Slots API ───
   const AD_SLOTS = [
     { id: 1, reward: 10, maxWatches: 40, network: "monetag" },

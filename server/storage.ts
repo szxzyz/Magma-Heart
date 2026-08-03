@@ -8,6 +8,7 @@ import {
   adminSettings,
   banLogs,
   userFarming,
+  userMachines,
   type User,
   type UpsertUser,
   type InsertEarning,
@@ -22,7 +23,9 @@ import {
   type InsertTransaction,
   type AdminSetting,
   type BanLog,
+  type UserMachine,
 } from "../shared/schema";
+import { getMachineType } from "../shared/machineTypes";
 import { db } from "./db";
 import { eq, desc, and, gte, lt, sql } from "drizzle-orm";
 import crypto from "crypto";
@@ -158,6 +161,19 @@ export interface IStorage {
   }>;
   startFarming(userId: string): Promise<{ success: boolean; message: string }>;
   claimFarming(userId: string): Promise<{ success: boolean; amount: number; message: string }>;
+
+  // Machine operations
+  getUserMachines(userId: string): Promise<UserMachine[]>;
+  purchaseMachine(userId: string, machineType: string): Promise<{ success: boolean; message: string; machine?: UserMachine }>;
+  claimMachineRewards(userId: string): Promise<{ success: boolean; amount: number; message: string }>;
+  getMachineStats(userId: string): Promise<{
+    totalMachines: number;
+    activeMachines: number;
+    hourlyAxn: number;
+    dailyAxn: number;
+    unclaimedAxn: number;
+    gramBalance: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2880,6 +2896,211 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // ─── Machine Operations ───────────────────────────────────────
+  async getUserMachines(userId: string): Promise<UserMachine[]> {
+    return await db.select().from(userMachines).where(eq(userMachines.userId, userId)).orderBy(desc(userMachines.createdAt));
+  }
+
+  async purchaseMachine(userId: string, machineTypeId: string): Promise<{ success: boolean; message: string; machine?: UserMachine }> {
+    const machineType = getMachineType(machineTypeId);
+    if (!machineType) {
+      return { success: false, message: 'Invalid machine type' };
+    }
+
+    const { pool } = await import('./db');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Atomic deduction: only succeeds if balance >= price (no concurrent oversell)
+      const deductResult = await client.query(
+        `UPDATE users
+         SET wallet_balance = wallet_balance::numeric - $1,
+             updated_at     = NOW()
+         WHERE id = $2
+           AND wallet_balance::numeric >= $1
+         RETURNING wallet_balance`,
+        [machineType.priceAxn, userId]
+      );
+
+      if (deductResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        // Fetch current balance only to give a helpful error message
+        const balRow = await pool.query('SELECT wallet_balance FROM users WHERE id = $1', [userId]);
+        const have = Math.floor(parseFloat(balRow.rows[0]?.wallet_balance || '0'));
+        return {
+          success: false,
+          message: `Insufficient AXN balance. Need ${machineType.priceAxn.toLocaleString()} AXN, have ${have.toLocaleString()} AXN`,
+        };
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + machineType.durationHours * 3_600_000);
+
+      const machineResult = await client.query(
+        `INSERT INTO user_machines
+           (user_id, machine_type, purchased_at, expires_at, last_claimed_at, total_claimed_axn)
+         VALUES ($1, $2, $3, $4, $3, 0)
+         RETURNING *`,
+        [userId, machineTypeId, now, expiresAt]
+      );
+
+      await client.query('COMMIT');
+
+      // Map snake_case DB row → camelCase UserMachine shape
+      const row = machineResult.rows[0];
+      const machine: UserMachine = {
+        id: row.id,
+        userId: row.user_id,
+        machineType: row.machine_type,
+        purchasedAt: row.purchased_at,
+        expiresAt: row.expires_at,
+        lastClaimedAt: row.last_claimed_at,
+        totalClaimedAxn: row.total_claimed_axn,
+        createdAt: row.created_at,
+      };
+
+      return { success: true, message: `${machineType.name} purchased successfully!`, machine };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async claimMachineRewards(userId: string): Promise<{ success: boolean; amount: number; message: string }> {
+    const { pool } = await import('./db');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Lock all user machines for this session — prevents concurrent claims
+      const machinesResult = await client.query(
+        `SELECT * FROM user_machines WHERE user_id = $1 FOR UPDATE`,
+        [userId]
+      );
+
+      const machines = machinesResult.rows;
+      if (machines.length === 0) {
+        await client.query('ROLLBACK');
+        return { success: false, amount: 0, message: 'No machines found' };
+      }
+
+      const now = new Date();
+      let totalFlooredAxn = 0;
+
+      for (const row of machines) {
+        const machineType = getMachineType(row.machine_type);
+        if (!machineType) continue;
+
+        const lastClaimed = new Date(row.last_claimed_at ?? row.purchased_at);
+        const expiresAt   = new Date(row.expires_at);
+        // Cap accumulation at expiry so expired machines stop earning
+        const effectiveNow = now < expiresAt ? now : expiresAt;
+        if (effectiveNow <= lastClaimed) continue;
+
+        const elapsedHours = (effectiveNow.getTime() - lastClaimed.getTime()) / 3_600_000;
+        const rawReward    = elapsedHours * machineType.hourlyAxn;
+        const flooredReward = Math.floor(rawReward);
+
+        if (flooredReward < 1) continue; // not a whole AXN yet — keep accumulating
+
+        // Advance lastClaimedAt by exactly the time corresponding to the credited
+        // whole AXN — fractional remainder stays in the unclaimed window for next claim
+        const creditedHours  = flooredReward / machineType.hourlyAxn;
+        const newLastClaimed = new Date(lastClaimed.getTime() + creditedHours * 3_600_000);
+        const newTotalClaimed = parseFloat(row.total_claimed_axn ?? '0') + flooredReward;
+
+        await client.query(
+          `UPDATE user_machines
+           SET last_claimed_at  = $1,
+               total_claimed_axn = $2
+           WHERE id = $3`,
+          [newLastClaimed, newTotalClaimed.toFixed(4), row.id]
+        );
+
+        totalFlooredAxn += flooredReward;
+      }
+
+      if (totalFlooredAxn < 1) {
+        await client.query('ROLLBACK');
+        return { success: false, amount: 0, message: 'No rewards to claim yet' };
+      }
+
+      // Atomic credit — no separate read needed
+      await client.query(
+        `UPDATE users
+         SET wallet_balance = wallet_balance::numeric + $1,
+             updated_at     = NOW()
+         WHERE id = $2`,
+        [totalFlooredAxn, userId]
+      );
+
+      await client.query('COMMIT');
+      return { success: true, amount: totalFlooredAxn, message: `Claimed ${totalFlooredAxn.toLocaleString()} AXN from your machines!` };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getMachineStats(userId: string): Promise<{
+    totalMachines: number;
+    activeMachines: number;
+    hourlyAxn: number;
+    dailyAxn: number;
+    unclaimedAxn: number;
+    gramBalance: number;
+  }> {
+    const [machinesResult, userResult] = await Promise.all([
+      db.select().from(userMachines).where(eq(userMachines.userId, userId)),
+      db.select({ walletBalance: users.walletBalance }).from(users).where(eq(users.id, userId)),
+    ]);
+
+    const walletBalance = parseFloat(userResult[0]?.walletBalance?.toString() || '0');
+    const gramBalance   = walletBalance / 100_000;
+
+    const now = new Date();
+    let hourlyAxn     = 0;
+    let dailyAxn      = 0;
+    let unclaimedAxn  = 0;
+    let activeMachines = 0;
+
+    for (const machine of machinesResult) {
+      const machineType = getMachineType(machine.machineType);
+      if (!machineType) continue;
+
+      const expiresAt = new Date(machine.expiresAt);
+      const isActive  = now < expiresAt;
+
+      if (isActive) {
+        activeMachines++;
+        hourlyAxn += machineType.hourlyAxn;
+        dailyAxn  += machineType.dailyAxn;
+      }
+
+      // Use same fractional-remainder logic as claimMachineRewards:
+      // report floor(rawReward) so the displayed figure matches what would be credited
+      const lastClaimed  = machine.lastClaimedAt ? new Date(machine.lastClaimedAt) : new Date(machine.purchasedAt!);
+      const effectiveNow = now < expiresAt ? now : expiresAt;
+      if (effectiveNow > lastClaimed) {
+        const elapsedHours = (effectiveNow.getTime() - lastClaimed.getTime()) / 3_600_000;
+        unclaimedAxn += Math.floor(elapsedHours * machineType.hourlyAxn);
+      }
+    }
+
+    return {
+      totalMachines: machinesResult.length,
+      activeMachines,
+      hourlyAxn:    Math.round(hourlyAxn * 100) / 100,
+      dailyAxn:     Math.round(dailyAxn  * 100) / 100,
+      unclaimedAxn,
+      gramBalance:  Math.round(gramBalance * 10_000) / 10_000,
+    };
+  }
 }
 
 export const storage = new DatabaseStorage();
