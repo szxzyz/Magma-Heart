@@ -574,7 +574,9 @@ function App() {
             {/* Real app — renders underneath so data fetching starts immediately */}
             {!isChecking && (
               <>
-                {!isChannelVerified && (
+                {/* TEMP: Channel join popup disabled — restore by removing this comment block
+                    and uncommenting the code below (revert this whole diff). */}
+                {false && !isChannelVerified && (
                   <Suspense fallback={null}>
                     <ChannelJoinPopup
                       telegramId={telegramId || ""}
@@ -585,7 +587,7 @@ function App() {
                     />
                   </Suspense>
                 )}
-                {isChannelVerified && <MigrationGate><AppContent /></MigrationGate>}
+                <MigrationGate><AppContent /></MigrationGate>
               </>
             )}
           </AppReadyContext.Provider>
