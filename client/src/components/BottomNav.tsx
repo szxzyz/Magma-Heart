@@ -102,11 +102,11 @@ const MachineIcon = ({ active, c }: { active: boolean; c: string }) => (
 );
 
 const TABS = [
-  { id: "game",    label: "Home",    path: "/game",    },
-  { id: "machine", label: "Machine", path: "/machine", },
   { id: "rewards", label: "Rewards", path: "/rewards", },
+  { id: "machine", label: "Machine", path: "/machine", },
   { id: "earn",    label: "Task",    path: "/earn",    },
   { id: "friend",  label: "Friends", path: "/friend",  },
+  { id: "game",    label: "Assets",  path: "/game",    },
 ] as const;
 
 export default function BottomNav() {
@@ -138,7 +138,9 @@ export default function BottomNav() {
   }, [queryClient]);
 
   const isOn = (tab: typeof TABS[number]) =>
-    location === tab.path || (tab.id === "game" && (location === "/" || location.startsWith("/game")));
+    location === tab.path ||
+    (tab.id === "game" && location.startsWith("/game")) ||
+    (tab.id === "rewards" && (location === "/" || location.startsWith("/rewards")));
 
   return (
     <nav style={{
