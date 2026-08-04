@@ -36,6 +36,7 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
           decoding="async"
           style={{
             width: "100%", height: "100%", objectFit: "cover", display: "block",
+            objectPosition: machine.imagePosition ?? "50% 50%",
             transform: `scale(${machine.imageZoom ?? 1})`, transformOrigin: "center center",
           }}
         />

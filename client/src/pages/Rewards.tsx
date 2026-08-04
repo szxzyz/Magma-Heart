@@ -71,6 +71,7 @@ function FarmingCard({
             decoding="async"
             style={{
               width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+              objectPosition: machineType.imagePosition ?? '50% 50%',
               transform: `scale(${machineType.imageZoom ?? 1})`, transformOrigin: 'center center',
             }}
           />
