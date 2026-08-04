@@ -60,6 +60,28 @@ const FriendsIcon = ({ active, c }: { active: boolean; c: string }) => (
   </svg>
 );
 
+const RewardsIcon = ({ active, c }: { active: boolean; c: string }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    {active ? (
+      <>
+        <rect x="3" y="8" width="18" height="13" rx="2" fill={c} opacity="0.15" stroke={c} strokeWidth="1.8"/>
+        <path d="M3 12h18" stroke={c} strokeWidth="1.8"/>
+        <path d="M12 8v13" stroke={c} strokeWidth="1.8"/>
+        <path d="M12 8H7.5a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8Z" fill={c} opacity="0.2" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
+        <path d="M12 8h4.5a2.5 2.5 0 0 0 0-5C14 3 12 8 12 8Z" fill={c} opacity="0.2" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
+      </>
+    ) : (
+      <>
+        <rect x="3" y="8" width="18" height="13" rx="2" stroke={c} strokeWidth="1.8"/>
+        <path d="M3 12h18" stroke={c} strokeWidth="1.8"/>
+        <path d="M12 8v13" stroke={c} strokeWidth="1.8"/>
+        <path d="M12 8H7.5a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8Z" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
+        <path d="M12 8h4.5a2.5 2.5 0 0 0 0-5C14 3 12 8 12 8Z" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
+      </>
+    )}
+  </svg>
+);
+
 const MachineIcon = ({ active, c }: { active: boolean; c: string }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
     {active ? (
@@ -82,6 +104,7 @@ const MachineIcon = ({ active, c }: { active: boolean; c: string }) => (
 const TABS = [
   { id: "game",    label: "Home",    path: "/game",    },
   { id: "machine", label: "Machine", path: "/machine", },
+  { id: "rewards", label: "Rewards", path: "/rewards", },
   { id: "earn",    label: "Task",    path: "/earn",    },
   { id: "friend",  label: "Friends", path: "/friend",  },
 ] as const;
@@ -158,6 +181,7 @@ export default function BottomNav() {
               {tab.id === "earn"    && <TasksIcon   active={on} c={c} />}
               {tab.id === "friend"  && <FriendsIcon active={on} c={c} />}
               {tab.id === "machine" && <MachineIcon active={on} c={c} />}
+              {tab.id === "rewards" && <RewardsIcon active={on} c={c} />}
 
               {showBadge && (
                 <div style={{
