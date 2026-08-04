@@ -14,7 +14,7 @@ export interface MachineType {
 export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'starter',
-    name: 'Starter Machine',
+    name: 'Humans',
     priceCipher: 25_000,
     totalRoiAxn: 31_250,
     durationDays: 87,
@@ -24,7 +24,7 @@ export const MACHINE_TYPES: MachineType[] = [
   },
   {
     id: 'basic',
-    name: 'Basic Machine',
+    name: 'Autobots',
     priceCipher: 75_000,
     totalRoiAxn: 93_750,
     durationDays: 81,
@@ -34,7 +34,7 @@ export const MACHINE_TYPES: MachineType[] = [
   },
   {
     id: 'advanced',
-    name: 'Advanced Machine',
+    name: 'Mercenaries',
     priceCipher: 200_000,
     totalRoiAxn: 250_000,
     durationDays: 62,
@@ -44,7 +44,7 @@ export const MACHINE_TYPES: MachineType[] = [
   },
   {
     id: 'pro',
-    name: 'Pro Machine',
+    name: 'Maximals',
     priceCipher: 500_000,
     totalRoiAxn: 625_000,
     durationDays: 57,
@@ -54,7 +54,7 @@ export const MACHINE_TYPES: MachineType[] = [
   },
   {
     id: 'elite',
-    name: 'Elite Machine',
+    name: 'Decepticons',
     priceCipher: 1_200_000,
     totalRoiAxn: 1_500_000,
     durationDays: 56,
@@ -64,7 +64,7 @@ export const MACHINE_TYPES: MachineType[] = [
   },
   {
     id: 'ultra',
-    name: 'Ultra Machine',
+    name: 'Dinobots',
     priceCipher: 2_500_000,
     totalRoiAxn: 3_125_000,
     durationDays: 52,
@@ -74,7 +74,7 @@ export const MACHINE_TYPES: MachineType[] = [
   },
   {
     id: 'mega',
-    name: 'Mega Machine',
+    name: 'Terrorcons',
     priceCipher: 4_500_000,
     totalRoiAxn: 5_625_000,
     durationDays: 49,
@@ -84,7 +84,7 @@ export const MACHINE_TYPES: MachineType[] = [
   },
   {
     id: 'titan',
-    name: 'Titan Machine',
+    name: 'Primes',
     priceCipher: 7_500_000,
     totalRoiAxn: 9_375_000,
     durationDays: 47,
