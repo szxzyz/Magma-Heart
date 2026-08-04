@@ -25,43 +25,36 @@ function fmtNum(n: number): string {
 }
 
 // ─── Machine Shop Card (NFT-marketplace style) ────────────────────────
-// NOTE: card artwork is a placeholder gradient + monogram for now.
-// Once real artwork is provided, swap the placeholder block below for
-// an <img src={machine.imageUrl} /> — layout (pills, name, button) stays the same.
-const CARD_GRADIENTS = [
-  "linear-gradient(160deg, #1e3a8a 0%, #1d4ed8 55%, #3b82f6 100%)",
-  "linear-gradient(160deg, #312e81 0%, #4338ca 55%, #6366f1 100%)",
-  "linear-gradient(160deg, #164e63 0%, #0e7490 55%, #22d3ee 100%)",
-  "linear-gradient(160deg, #7c2d12 0%, #c2410c 55%, #fb923c 100%)",
-  "linear-gradient(160deg, #3f0d1e 0%, #9f1239 55%, #f43f5e 100%)",
-  "linear-gradient(160deg, #052e16 0%, #15803d 55%, #4ade80 100%)",
-  "linear-gradient(160deg, #422006 0%, #a16207 55%, #facc15 100%)",
-  "linear-gradient(160deg, #2e1065 0%, #7e22ce 55%, #c084fc 100%)",
-];
-
-function MachineShopCard({ machine, index, onBuy }: { machine: MachineType; index: number; onBuy: (m: MachineType) => void }) {
-  const gradient = CARD_GRADIENTS[index % CARD_GRADIENTS.length];
+function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; level: number; onBuy: (m: MachineType) => void }) {
+  const isMaxLevel = level >= 10;
 
   return (
     <div style={{ width: 152, flexShrink: 0, scrollSnapAlign: "start" }}>
       {/* Artwork */}
       <button
-        onClick={() => onBuy(machine)}
+        onClick={() => !isMaxLevel && onBuy(machine)}
         style={{
           position: "relative", width: "100%", aspectRatio: "1 / 1",
           borderRadius: 16, overflow: "hidden", border: "none", padding: 0,
-          background: gradient, cursor: "pointer", display: "block",
+          background: "#16181d", cursor: isMaxLevel ? "not-allowed" : "pointer", display: "block",
+          opacity: isMaxLevel ? 0.62 : 1,
         }}
         className="active:scale-95 transition-transform"
       >
-        {/* Monogram placeholder */}
+        <img
+          src={machine.imageUrl}
+          alt={machine.name}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+
+        {/* Level pill — top left */}
         <div style={{
-          position: "absolute", inset: 0,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 34, fontWeight: 900, color: "rgba(255,255,255,0.28)",
-          letterSpacing: "-0.5px",
+          position: "absolute", top: 8, left: 8,
+          background: isMaxLevel ? "rgba(74,222,128,0.85)" : "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(4px)", borderRadius: 20, padding: "3px 8px",
+          fontSize: 9, fontWeight: 800, color: isMaxLevel ? "#052e16" : "#fff",
         }}>
-          {machine.name.slice(0, 2).toUpperCase()}
+          LEVEL {Math.min(level, 10)}/10
         </div>
 
         {/* Duration pill — top right */}
@@ -102,26 +95,27 @@ function MachineShopCard({ machine, index, onBuy }: { machine: MachineType; inde
 
       {/* Buy button */}
       <button
-        onClick={() => onBuy(machine)}
+        onClick={() => !isMaxLevel && onBuy(machine)}
+        disabled={isMaxLevel}
         style={{
           width: "100%", marginTop: 8,
-          background: "linear-gradient(135deg, #2563eb, #3b82f6)",
-          color: "#fff", border: "none",
+          background: isMaxLevel ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg, #2563eb, #3b82f6)",
+          color: isMaxLevel ? "rgba(255,255,255,0.35)" : "#fff", border: "none",
           borderRadius: 10, padding: "8px 0",
           fontSize: 11, fontWeight: 800,
-          cursor: "pointer", letterSpacing: "0.03em",
-          boxShadow: "0 2px 12px rgba(37,99,235,0.4)",
+          cursor: isMaxLevel ? "not-allowed" : "pointer", letterSpacing: "0.03em",
+          boxShadow: isMaxLevel ? "none" : "0 2px 12px rgba(37,99,235,0.4)",
         }}
         className="active:scale-95 transition-transform"
       >
-        BUY
+        {isMaxLevel ? "MAX LEVEL" : "BUY"}
       </button>
     </div>
   );
 }
 
 // ─── Owned Machine Card ──────────────────────────────────────────────
-function OwnedMachineCard({ machine }: { machine: any }) {
+function OwnedMachineCard({ machine, level }: { machine: any; level: number }) {
   const [remaining, setRemaining] = useState(0);
   const [unclaimed, setUnclaimed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -164,19 +158,11 @@ function OwnedMachineCard({ machine }: { machine: any }) {
       {/* Top row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 12,
-            background: isExpired ? "rgba(255,255,255,0.04)" : "rgba(74,222,128,0.1)",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={isExpired ? "rgba(255,255,255,0.3)" : "rgba(74,222,128,0.85)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="7" width="20" height="14" rx="2"/>
-              <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-              <circle cx="12" cy="14" r="2"/>
-            </svg>
+          <div style={{ width: 44, height: 44, borderRadius: 12, overflow: "hidden", flexShrink: 0, opacity: isExpired ? 0.45 : 1 }}>
+            <img src={mType.imageUrl} alt={mType.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           </div>
           <div>
-            <div style={{ color: "#fff", fontSize: 15, fontWeight: 800, lineHeight: 1.2 }}>{mType.name}</div>
+            <div style={{ color: "#fff", fontSize: 15, fontWeight: 800, lineHeight: 1.2 }}>{mType.name} <span style={{ color: "#60a5fa", fontSize: 11 }}>LVL {level}/10</span></div>
             <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 3 }}>
               {isExpired ? "Expired" : `${fmtNum(mType.hourlyAxn)} AXN/hr`}
             </div>
@@ -330,6 +316,11 @@ export default function MachinePage() {
 
   const stats      = machineData?.stats;
   const machines: any[] = machineData?.machines || [];
+  const levels = machines.reduce<Record<string, number>>((counts, machine) => {
+    counts[machine.machineType] = (counts[machine.machineType] || 0) + 1;
+    return counts;
+  }, {});
+  const getLevel = (machineType: string) => Math.min(10, levels[machineType] || 0);
   const activeMachines  = machines.filter(m => new Date(m.expiresAt) > new Date());
   const expiredMachines = machines.filter(m => new Date(m.expiresAt) <= new Date());
 
@@ -431,7 +422,7 @@ export default function MachinePage() {
             </div>
 
             {/* Active machines */}
-            {activeMachines.map(m => <OwnedMachineCard key={m.id} machine={m} />)}
+            {activeMachines.map(m => <OwnedMachineCard key={m.id} machine={m} level={getLevel(m.machineType)} />)}
 
             {/* Expired machines */}
             {expiredMachines.length > 0 && (
@@ -441,7 +432,7 @@ export default function MachinePage() {
                     Expired
                   </span>
                 </div>
-                {expiredMachines.map(m => <OwnedMachineCard key={m.id} machine={m} />)}
+                {expiredMachines.map(m => <OwnedMachineCard key={m.id} machine={m} level={getLevel(m.machineType)} />)}
               </>
             )}
 
@@ -469,8 +460,8 @@ export default function MachinePage() {
             paddingBottom: 4, marginBottom: 16,
           }}
         >
-          {MACHINE_TYPES.slice(0, 4).map((m, i) => (
-            <MachineShopCard key={m.id} machine={m} index={i} onBuy={setConfirmMachine} />
+          {MACHINE_TYPES.slice(0, 4).map(m => (
+            <MachineShopCard key={m.id} machine={m} level={getLevel(m.id)} onBuy={setConfirmMachine} />
           ))}
         </div>
 
@@ -483,8 +474,8 @@ export default function MachinePage() {
             paddingBottom: 4,
           }}
         >
-          {MACHINE_TYPES.slice(4, 8).map((m, i) => (
-            <MachineShopCard key={m.id} machine={m} index={i + 4} onBuy={setConfirmMachine} />
+          {MACHINE_TYPES.slice(4, 8).map(m => (
+            <MachineShopCard key={m.id} machine={m} level={getLevel(m.id)} onBuy={setConfirmMachine} />
           ))}
         </div>
       </div>
