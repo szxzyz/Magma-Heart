@@ -1,22 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { showNotification } from "@/components/AppNotification";
 import { apiRequest } from "@/lib/queryClient";
 import Header from "@/components/Header";
 import MenuPopup from "@/components/MenuPopup";
 import { MACHINE_TYPES, type MachineType } from "../../../shared/machineTypes";
-
-// ─── Helpers ────────────────────────────────────────────────────────
-function fmtCountdown(ms: number): string {
-  if (ms <= 0) return "Expired";
-  const totalSec = Math.floor(ms / 1000);
-  const d = Math.floor(totalSec / 86400);
-  const h = Math.floor((totalSec % 86400) / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (d > 0) return `${d}d ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
 
 function fmtNum(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2).replace(/\.00$/, "") + "M";
@@ -44,6 +32,8 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
         <img
           src={machine.imageUrl}
           alt={machine.name}
+          loading="lazy"
+          decoding="async"
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
 
@@ -110,94 +100,6 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
       >
         {isMaxLevel ? "MAX LEVEL" : "BUY"}
       </button>
-    </div>
-  );
-}
-
-// ─── Owned Machine Card ──────────────────────────────────────────────
-function OwnedMachineCard({ machine, level }: { machine: any; level: number }) {
-  const [remaining, setRemaining] = useState(0);
-  const [unclaimed, setUnclaimed] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const mType = MACHINE_TYPES.find(m => m.id === machine.machineType);
-
-  useEffect(() => {
-    if (!mType) return;
-    const expiresAt = new Date(machine.expiresAt).getTime();
-    const lastClaimed = new Date(machine.lastClaimedAt || machine.purchasedAt).getTime();
-
-    function tick() {
-      const now = Date.now();
-      setRemaining(Math.max(0, expiresAt - now));
-      const effectiveNow = Math.min(now, expiresAt);
-      const elapsedHours = Math.max(0, effectiveNow - lastClaimed) / 3_600_000;
-      setUnclaimed(Math.floor(elapsedHours * mType!.hourlyAxn));
-    }
-    tick();
-    intervalRef.current = setInterval(tick, 1000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [machine, mType]);
-
-  if (!mType) return null;
-
-  const isExpired = Date.now() >= new Date(machine.expiresAt).getTime();
-  const expiresAt = new Date(machine.expiresAt).getTime();
-  const purchasedAt = new Date(machine.purchasedAt).getTime();
-  const totalDurationMs = mType.durationHours * 3_600_000;
-  const elapsed = Date.now() - purchasedAt;
-  const progress = Math.min(1, Math.max(0, elapsed / totalDurationMs));
-
-  return (
-    <div style={{
-      background: "rgba(255,255,255,0.07)",
-      borderRadius: 16, padding: "18px 18px",
-      marginBottom: 12,
-      opacity: isExpired ? 0.55 : 1,
-    }}>
-      {/* Top row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, overflow: "hidden", flexShrink: 0, opacity: isExpired ? 0.45 : 1 }}>
-            <img src={mType.imageUrl} alt={mType.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-          </div>
-          <div>
-            <div style={{ color: "#fff", fontSize: 15, fontWeight: 800, lineHeight: 1.2 }}>{mType.name} <span style={{ color: "#60a5fa", fontSize: 11 }}>LVL {level}/10</span></div>
-            <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 3 }}>
-              {isExpired ? "Expired" : `${fmtNum(mType.hourlyAxn)} AXN/hr`}
-            </div>
-          </div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: isExpired ? "rgba(255,255,255,0.25)" : "#4ade80" }}>
-            +{fmtNum(unclaimed)}
-          </div>
-          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 1 }}>AXN unclaimed</div>
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
-          <div style={{
-            height: "100%",
-            width: `${progress * 100}%`,
-            background: isExpired ? "rgba(255,255,255,0.1)" : "linear-gradient(90deg, #2563eb, #3b82f6)",
-            borderRadius: 3,
-            transition: "width 1s linear",
-          }} />
-        </div>
-      </div>
-
-      {/* Bottom row */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
-          Earned: {fmtNum(parseFloat(machine.totalClaimedAxn || "0"))} AXN total
-        </div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: isExpired ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.55)" }}>
-          {fmtCountdown(remaining)}
-        </div>
-      </div>
     </div>
   );
 }
@@ -314,19 +216,13 @@ export default function MachinePage() {
     refetchInterval: 30000,
   });
 
-  const stats      = machineData?.stats;
   const machines: any[] = machineData?.machines || [];
   const levels = machines.reduce<Record<string, number>>((counts, machine) => {
     counts[machine.machineType] = (counts[machine.machineType] || 0) + 1;
     return counts;
   }, {});
   const getLevel = (machineType: string) => Math.min(10, levels[machineType] || 0);
-  const activeMachines  = machines.filter(m => new Date(m.expiresAt) > new Date());
-  const expiredMachines = machines.filter(m => new Date(m.expiresAt) <= new Date());
-
   const cipherBalance = parseFloat(user?.balance || "0");
-  const unclaimedAxn  = stats?.unclaimedAxn ?? 0;
-  const canClaim      = unclaimedAxn >= 1;
 
   const buyMutation = useMutation({
     mutationFn: async (machineType: string) => {
@@ -347,23 +243,6 @@ export default function MachinePage() {
     },
   });
 
-  const claimMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/machines/claim", {});
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed");
-      return data;
-    },
-    onSuccess: (data) => {
-      showNotification(data.message, "success");
-      refetchMachines();
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-    },
-    onError: (err: any) => {
-      showNotification(err?.message || "Claim failed. Try again.", "error");
-    },
-  });
-
   return (
     <div style={{ height: "100dvh", background: "#0a0a0a", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <Header onMenuOpen={() => setMenuOpen(true)} />
@@ -375,79 +254,13 @@ export default function MachinePage() {
         paddingBottom: "max(90px, calc(env(safe-area-inset-bottom, 0px) + 90px))",
       }}>
 
-        {/* ─── YOUR MACHINES ─── */}
-        {machines.length > 0 && (
-          <>
-            {/* Section header */}
-            <div style={{ marginBottom: 12 }}>
-              <span style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.28)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                Your Machines
-              </span>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 3 }}>
-                {activeMachines.length} active · {fmtNum(stats?.hourlyAxn ?? 0)} AXN/hr
-              </div>
-            </div>
-
-            {/* Claim rewards bar */}
-            <div style={{
-              background: "rgba(255,255,255,0.07)",
-              borderRadius: 14, padding: "14px 18px",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              marginBottom: 12,
-            }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>
-                  {fmtNum(unclaimedAxn)} AXN
-                </div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>
-                  Pending rewards
-                </div>
-              </div>
-              <button
-                onClick={() => claimMutation.mutate()}
-                disabled={!canClaim || claimMutation.isPending}
-                style={{
-                  background: canClaim ? "linear-gradient(135deg, #2563eb, #3b82f6)" : "rgba(255,255,255,0.06)",
-                  color: canClaim ? "#fff" : "rgba(255,255,255,0.25)",
-                  border: "none", borderRadius: 10,
-                  padding: "10px 20px", fontSize: 12, fontWeight: 800,
-                  cursor: canClaim ? "pointer" : "not-allowed",
-                  letterSpacing: "0.03em",
-                  boxShadow: canClaim ? "0 2px 12px rgba(37,99,235,0.4)" : "none",
-                }}
-                className="active:scale-95 transition-transform"
-              >
-                {claimMutation.isPending ? "CLAIMING…" : "CLAIM AXN"}
-              </button>
-            </div>
-
-            {/* Active machines */}
-            {activeMachines.map(m => <OwnedMachineCard key={m.id} machine={m} level={getLevel(m.machineType)} />)}
-
-            {/* Expired machines */}
-            {expiredMachines.length > 0 && (
-              <>
-                <div style={{ marginTop: 8, marginBottom: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.18)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                    Expired
-                  </span>
-                </div>
-                {expiredMachines.map(m => <OwnedMachineCard key={m.id} machine={m} level={getLevel(m.machineType)} />)}
-              </>
-            )}
-
-            {/* Divider between sections */}
-            <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "8px 0 24px" }} />
-          </>
-        )}
-
         {/* ─── NFT MARKETPLACE ─── */}
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 20, fontWeight: 900, color: "#fff", letterSpacing: "-0.3px" }}>
             NFT Marketplace
           </div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 4, lineHeight: 1.5 }}>
-            Buy NFTs using CIPHER and earn passive AXN rewards until the maximum ROI is reached.
+            Buy NFTs using CIPHER. Manage farming progress and claim AXN on the Rewards page.
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import MenuPopup from "@/components/MenuPopup";
 import Header from "@/components/Header";
 import { showRewardedInterstitial } from "@/lib/showAd";
+import { MACHINE_TYPES } from "../../../shared/machineTypes";
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -12,15 +13,116 @@ function getTodayKey() {
 
 type MysteryPhase = 'idle' | 'opening' | 'revealed' | 'claiming' | 'done';
 
-const FARM_RATE = 0.001;
-const FARM_DURATION = 4 * 3600;
-const FARM_MAX = parseFloat((FARM_DURATION * FARM_RATE).toFixed(4));
-
 function fmtCountdown(secs: number): string {
+  if (secs <= 0) return "Expired";
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function fmtNum(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2).replace(/\.00$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function getMachineUnclaimed(machine: any, machineType: any, now: number): number {
+  const lastClaimed = new Date(machine.lastClaimedAt || machine.purchasedAt).getTime();
+  const expiresAt = new Date(machine.expiresAt).getTime();
+  const effectiveNow = Math.min(now, expiresAt);
+  if (effectiveNow <= lastClaimed) return 0;
+  return Math.floor(((effectiveNow - lastClaimed) / 3_600_000) * machineType.hourlyAxn);
+}
+
+function FarmingCard({
+  machineType,
+  machines,
+  now,
+}: {
+  machineType: any;
+  machines: any[];
+  now: number;
+}) {
+  const activeMachines = machines.filter(machine => new Date(machine.expiresAt).getTime() > now);
+  const totalUnclaimed = machines.reduce((sum, machine) => sum + getMachineUnclaimed(machine, machineType, now), 0);
+  const totalClaimed = machines.reduce((sum, machine) => sum + parseFloat(machine.totalClaimedAxn || "0"), 0);
+  const progress = activeMachines.length > 0
+    ? Math.max(...activeMachines.map(machine => {
+        const purchasedAt = new Date(machine.purchasedAt).getTime();
+        return Math.min(1, Math.max(0, (now - purchasedAt) / (machineType.durationHours * 3_600_000)));
+      }))
+    : 1;
+  const remainingSeconds = activeMachines.length > 0
+    ? Math.max(0, Math.floor((Math.min(...activeMachines.map(machine => new Date(machine.expiresAt).getTime())) - now) / 1000))
+    : 0;
+
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.07)', borderRadius: 16, padding: '16px',
+      marginBottom: 12, opacity: activeMachines.length > 0 ? 1 : 0.58,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 }}>
+        <div style={{ width: 54, height: 54, borderRadius: 14, overflow: 'hidden', flexShrink: 0, background: '#16181d' }}>
+          <img
+            src={machineType.imageUrl}
+            alt={machineType.name}
+            loading="lazy"
+            decoding="async"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ color: '#fff', fontSize: 16, fontWeight: 800 }}>
+            {machineType.name}
+          </div>
+          <div style={{ color: '#60a5fa', fontSize: 12, fontWeight: 800, marginTop: 3 }}>
+            Level {Math.min(machines.length, 10)}/10
+            {machines.length > 1 && <span style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}> · {machines.length} purchases</span>}
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ color: activeMachines.length > 0 ? '#4ade80' : 'rgba(255,255,255,0.35)', fontSize: 17, fontWeight: 900 }}>
+            +{fmtNum(totalUnclaimed)}
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 2 }}>AXN unclaimed</div>
+        </div>
+      </div>
+
+      <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{
+          height: '100%', width: `${progress * 100}%`, borderRadius: 4,
+          background: activeMachines.length > 0 ? 'linear-gradient(90deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.14)',
+        }} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
+        <div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Farming progress</div>
+          <div style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>{Math.round(progress * 100)}%</div>
+        </div>
+        <div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Farming rewards</div>
+          <div style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>{fmtNum(totalUnclaimed)} AXN</div>
+        </div>
+        <div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Remaining time</div>
+          <div style={{ color: activeMachines.length > 0 ? '#fff' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+            {fmtCountdown(remainingSeconds)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 11 }}>
+        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>
+          Earned: {fmtNum(totalClaimed)} AXN · {fmtNum(machineType.hourlyAxn)} AXN/hr
+        </div>
+        <div style={{ color: activeMachines.length > 0 ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: 700 }}>
+          {activeMachines.length > 0 ? 'Farming active' : 'Expired'}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Rewards() {
@@ -35,12 +137,7 @@ export default function Rewards() {
   const [mysteryReward, setMysteryReward] = useState(0);
   const mysteryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Farming state
-  const [farmCountdown, setFarmCountdown] = useState(FARM_DURATION);
-  const [farmAccum, setFarmAccum] = useState(0);
-  const [showFarmInfo, setShowFarmInfo] = useState(false);
-  const [showAlertPopup, setShowAlertPopup] = useState(false);
-  const farmIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const queryClient = useQueryClient();
 
@@ -131,61 +228,51 @@ export default function Rewards() {
     mysteryTimerRef.current = setTimeout(() => setMysteryPhase('idle'), 1800);
   };
 
-  // Farming query & mutations
-  const { data: farmData, refetch: refetchFarm } = useQuery<any>({
-    queryKey: ['/api/farming/state'],
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-  });
-
   useEffect(() => {
-    if (!farmData) return;
-    setFarmCountdown(farmData.remainingSeconds ?? FARM_DURATION);
-    setFarmAccum(farmData.minedAxn ?? 0);
-  }, [farmData]);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  useEffect(() => {
-    if (farmIntervalRef.current) clearInterval(farmIntervalRef.current);
-    const isActive = farmData?.isActive;
-    if (!isActive) return;
-    const rate = farmData?.effectiveRate ?? FARM_RATE;
-    const maxAxn = FARM_DURATION * rate;
-    farmIntervalRef.current = setInterval(() => {
-      setFarmCountdown(prev => Math.max(0, prev - 1));
-      setFarmAccum(prev => parseFloat(Math.min(prev + rate, maxAxn).toFixed(4)));
-    }, 1000);
-    return () => { if (farmIntervalRef.current) clearInterval(farmIntervalRef.current); };
-  }, [farmData?.isActive, farmData?.startedAt, farmData?.effectiveRate]);
-
-  const farmStartMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest('POST', '/api/farming/start', {});
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to start');
-      return data;
-    },
-    onSuccess: () => {
-      showNotification('Farming started! Claim anytime — no need to wait.', 'success');
-      refetchFarm();
-    },
-    onError: (err: any) => showNotification(err?.message || 'Failed to start farming', 'error'),
+  const { data: machineData } = useQuery<any>({
+    queryKey: ['/api/machines'],
+    staleTime: 10000,
+    refetchInterval: 30000,
   });
+  const machines: any[] = machineData?.machines || [];
+  const machinesByType = machines.reduce<Record<string, any[]>>((groups, machine) => {
+    (groups[machine.machineType] ||= []).push(machine);
+    return groups;
+  }, {});
+  const ownedMachineTypes = MACHINE_TYPES.filter(machineType => machinesByType[machineType.id]?.length);
 
-  const farmClaimMutation = useMutation({
+  const claimMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest('POST', '/api/farming/claim', {});
+      const res = await apiRequest('POST', '/api/machines/claim', {});
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to claim');
       return data;
     },
     onSuccess: (data) => {
-      showNotification(`Farming reward claimed! +${data.amount} AXN`, 'success');
+      showNotification(`Farming rewards claimed! +${data.amount} AXN`, 'success');
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-      refetchFarm();
+      queryClient.invalidateQueries({ queryKey: ['/api/machines'] });
     },
-    onError: (err: any) => showNotification(err?.message || 'Failed to claim', 'error'),
+    onError: (err: any) => showNotification(err?.message || 'Failed to claim farming rewards', 'error'),
   });
 
+  const totalUnclaimed = ownedMachineTypes.reduce((sum, machineType) => (
+    sum + (machinesByType[machineType.id] || []).reduce((groupSum, machine) => (
+      groupSum + getMachineUnclaimed(machine, machineType, now)
+    ), 0)
+  ), 0);
+  // The legacy markup below is hidden and intentionally disconnected from the API.
+  const farmData = { isActive: false };
+  const farmStartMutation = { isPending: false, mutate: () => undefined };
+  const farmClaimMutation = claimMutation;
+  const farmCountdown = 0;
+  const farmAccum = 0;
+  const [showFarmInfo, setShowFarmInfo] = useState(false);
+  const [showAlertPopup, setShowAlertPopup] = useState(false);
   return (
     <div style={{ height: '100dvh', background: '#0a0a0a', display: 'flex', flexDirection: 'column', overflow: 'hidden', width: '100%' }}>
       <style>{`
@@ -290,11 +377,58 @@ export default function Rewards() {
           <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             Farming
           </span>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>Earn additional rewards.</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>
+            Rewards are generated only by NFTs you own.
+          </div>
         </div>
 
+        {ownedMachineTypes.length === 0 ? (
+          <div style={{
+            background: 'rgba(255,255,255,0.05)', border: '1px dashed rgba(255,255,255,0.12)',
+            borderRadius: 16, padding: '28px 20px', marginBottom: 20, textAlign: 'center',
+          }}>
+            <div style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>You don't own any NFTs yet.</div>
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, lineHeight: 1.5, marginTop: 7 }}>
+              Purchase an NFT on the Machine page to start farming AXN.
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: '11px 14px', marginBottom: 12,
+            }}>
+              <div>
+                <div style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>{fmtNum(totalUnclaimed)} AXN</div>
+                <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 11, marginTop: 2 }}>Total unclaimed farming rewards</div>
+              </div>
+              <button
+                onClick={() => claimMutation.mutate()}
+                disabled={totalUnclaimed < 1 || claimMutation.isPending}
+                style={{
+                  background: totalUnclaimed >= 1 ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.06)',
+                  color: totalUnclaimed >= 1 ? '#fff' : 'rgba(255,255,255,0.25)',
+                  border: 'none', borderRadius: 10, padding: '9px 15px',
+                  fontSize: 11, fontWeight: 800, cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed',
+                }}
+                className="active:scale-95 transition-transform"
+              >
+                {claimMutation.isPending ? 'CLAIMING…' : 'CLAIM AXN'}
+              </button>
+            </div>
+            {ownedMachineTypes.map(machineType => (
+              <FarmingCard
+                key={machineType.id}
+                machineType={machineType}
+                machines={machinesByType[machineType.id]}
+                now={now}
+              />
+            ))}
+          </>
+        )}
+
         {/* FARMING */}
-        <div style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ display: 'none', background: 'rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden', marginBottom: 20 }}>
           {/* Main row: coin + counting */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px' }}>
             <div style={{
@@ -315,7 +449,7 @@ export default function Rewards() {
                   </div>
                 );
               })()}
-              <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 12, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>0.001/s · 14.4 AXN per cycle</div>
+              <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 12, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>NFT-owned farming rewards</div>
             </div>
           </div>
 
@@ -382,7 +516,7 @@ export default function Rewards() {
                 {[
                   { label: 'Mining speed', val: '0.001 AXN/s' },
                   { label: 'Cycle duration', val: '4 hours' },
-                  { label: 'Max per cycle', val: '14.4 AXN' },
+                  { label: 'Rewards', val: 'NFT-owned only' },
                   { label: 'Claim anytime', val: 'Yes' },
                   { label: 'Auto-stop', val: 'After 4 hours' },
                 ].map((r, i, arr) => (
