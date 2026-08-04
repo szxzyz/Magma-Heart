@@ -7,7 +7,6 @@ import {
   transactions,
   adminSettings,
   banLogs,
-  userFarming,
   userMachines,
   type User,
   type UpsertUser,
@@ -29,9 +28,6 @@ import { getMachineType } from "../shared/machineTypes";
 import { db } from "./db";
 import { eq, desc, and, gte, lt, sql } from "drizzle-orm";
 import crypto from "crypto";
-
-const FARMING_RATE = 0.001; // AXN per second
-const FARMING_DURATION = 4 * 60 * 60; // 4 hours in seconds
 
 // Payment system configuration
 export interface PaymentSystem {
@@ -478,68 +474,37 @@ export class DatabaseStorage implements IStorage {
     remainingSeconds: number;
     elapsedSeconds: number;
   }> {
-    const [row] = await db.select().from(userFarming).where(eq(userFarming.userId, userId));
-    if (!row || !row.startedAt) {
-      return { isActive: false, startedAt: null, minedAxn: 0, remainingSeconds: FARMING_DURATION, elapsedSeconds: 0 };
-    }
-    const now = new Date();
-    const elapsedSeconds = Math.floor((now.getTime() - row.startedAt.getTime()) / 1000);
-    const cappedElapsed = Math.min(elapsedSeconds, FARMING_DURATION);
-    const remainingSeconds = Math.max(0, FARMING_DURATION - cappedElapsed);
-    const minedAxn = parseFloat((cappedElapsed * FARMING_RATE).toFixed(4));
+    // Farming is calculated from owned NFT machine records. Do not expose the
+    // old user-level session or legacy cycle to clients.
     return {
-      isActive: true,
-      startedAt: row.startedAt.toISOString(),
-      minedAxn,
-      remainingSeconds,
-      elapsedSeconds: cappedElapsed,
+      isActive: false,
+      startedAt: null,
+      minedAxn: 0,
+      remainingSeconds: 0,
+      elapsedSeconds: 0,
     };
   }
 
   async startFarming(userId: string): Promise<{ success: boolean; message: string }> {
-    const [existing] = await db.select().from(userFarming).where(eq(userFarming.userId, userId));
-    const now = new Date();
-    if (existing) {
-      if (existing.startedAt) {
-        const elapsedSeconds = Math.floor((now.getTime() - existing.startedAt.getTime()) / 1000);
-        if (elapsedSeconds < FARMING_DURATION) {
-          return { success: false, message: 'Farming is already active.' };
-        }
-        return { success: false, message: 'Farming complete! Claim your AXN first.' };
-      }
-      await db.update(userFarming).set({ startedAt: now, updatedAt: now }).where(eq(userFarming.userId, userId));
-    } else {
-      await db.insert(userFarming).values({ userId, startedAt: now });
+    // NFT farming is managed by user_machines. Keep this legacy endpoint
+    // explicitly disabled so an old client cannot start a free farming session.
+    const [ownedMachine] = await db
+      .select({ id: userMachines.id })
+      .from(userMachines)
+      .where(eq(userMachines.userId, userId))
+      .limit(1);
+    if (!ownedMachine) {
+      return { success: false, message: 'Purchase an NFT before starting farming.' };
     }
-    return { success: true, message: 'Farming started! You will earn 0.01 AXN/sec for 2 hours.' };
+    return { success: false, message: 'Farming is managed from your owned NFTs.' };
   }
 
   async claimFarming(userId: string): Promise<{ success: boolean; amount: number; message: string }> {
-    const [row] = await db.select().from(userFarming).where(eq(userFarming.userId, userId));
-    if (!row || !row.startedAt) {
-      return { success: false, amount: 0, message: 'No active farming session. Start farming first.' };
-    }
-    const now = new Date();
-    const elapsedSeconds = Math.floor((now.getTime() - row.startedAt.getTime()) / 1000);
-    const cappedElapsed = Math.min(elapsedSeconds, FARMING_DURATION);
-    const amount = parseFloat((cappedElapsed * FARMING_RATE).toFixed(4));
-    if (amount < 0.01) {
-      return { success: false, amount: 0, message: 'Nothing to claim yet.' };
-    }
-    await db.transaction(async (tx) => {
-      await tx.update(users).set({
-        walletBalance: sql`COALESCE(${users.walletBalance}, 0) + ${amount.toString()}`,
-        updatedAt: now,
-      }).where(eq(users.id, userId));
-      await tx.update(userFarming).set({ startedAt: null, updatedAt: now }).where(eq(userFarming.userId, userId));
-      await tx.insert(earnings).values({
-        userId,
-        amount: amount.toString(),
-        source: 'farming',
-        description: `AXN Farming claim: ${amount} AXN`,
-      });
-    });
-    return { success: true, amount, message: `Claimed ${amount} AXN!` };
+    return {
+      success: false,
+      amount: 0,
+      message: 'Farming rewards can only be claimed from owned NFTs.',
+    };
   }
 
 
