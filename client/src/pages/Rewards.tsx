@@ -69,7 +69,10 @@ function FarmingCard({
             alt={machineType.name}
             loading="lazy"
             decoding="async"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            style={{
+              width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+              transform: `scale(${machineType.imageZoom ?? 1})`, transformOrigin: 'center center',
+            }}
           />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>

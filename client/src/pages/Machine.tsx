@@ -34,7 +34,10 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
           alt={machine.name}
           loading="lazy"
           decoding="async"
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          style={{
+            width: "100%", height: "100%", objectFit: "cover", display: "block",
+            transform: `scale(${machine.imageZoom ?? 1})`, transformOrigin: "center center",
+          }}
         />
 
         {/* Level pill — top left */}
