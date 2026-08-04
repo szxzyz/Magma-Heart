@@ -27,6 +27,7 @@ const Landing = lazy(() => import("@/pages/Landing"));
 const Admin = lazy(() => import("@/pages/Admin"));
 const CountryControls = lazy(() => import("@/pages/CountryControls"));
 const GamesPage = lazy(() => import("@/pages/Games"));
+const RewardsPage = lazy(() => import("@/pages/Rewards"));
 const EarnPage = lazy(() => import("@/pages/Earn"));
 const WatchPage = lazy(() => import("@/pages/Earn"));
 const FriendPage = lazy(() => import("@/pages/Friend"));
@@ -139,7 +140,7 @@ function LoadingFallback({ isReady = false, onDone }: { isReady?: boolean; onDon
   );
 }
 
-const NAV_ROUTES = new Set(["/", "/earn", "/game", "/friend", "/machine"]);
+const NAV_ROUTES = new Set(["/", "/earn", "/game", "/friend", "/machine", "/rewards"]);
 
 function Router() {
   const [location] = useLocation();
@@ -158,6 +159,7 @@ function Router() {
           <Route path="/admin" component={Admin} />
           <Route path="/admin/country-controls" component={CountryControls} />
           <Route path="/game" component={GamesPage} />
+          <Route path="/rewards" component={RewardsPage} />
           <Route path="/machine" component={MachinePage} />
           <Route path="/withdraw" component={() => { const [, setLocation] = useLocation(); setLocation("/game"); return null; }} />
           <Route path="/profile" component={() => { const [, setLocation] = useLocation(); setLocation("/game"); return null; }} />
