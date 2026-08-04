@@ -2911,6 +2911,30 @@ export class DatabaseStorage implements IStorage {
     try {
       await client.query('BEGIN');
 
+      // Lock the user row before checking the lifetime count. This serializes
+      // purchases for a user, including the zero-existing-row case.
+      await client.query(
+        `SELECT id FROM users WHERE id = $1 FOR UPDATE`,
+        [userId]
+      );
+
+      // A level is the lifetime number of purchases of this NFT type.
+      // Lock the matching rows so two concurrent purchases cannot exceed level 10.
+      const ownedResult = await client.query(
+        `SELECT id FROM user_machines
+         WHERE user_id = $1 AND machine_type = $2
+         FOR UPDATE`,
+        [userId, machineTypeId]
+      );
+      const currentLevel = ownedResult.rows.length;
+      if (currentLevel >= 10) {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          message: `${machineType.name} is already at Level 10, the maximum level.`,
+        };
+      }
+
       // Atomic deduction: only succeeds if balance >= price (no concurrent oversell)
       const deductResult = await client.query(
         `UPDATE users
