@@ -3,6 +3,7 @@
 export interface MachineType {
   id: string;
   name: string;
+  imageUrl: string;
   priceCipher: number;     // price in CIPHER
   totalRoiAxn: number;     // total ROI in AXN
   durationDays: number;    // machine lifetime in days
@@ -15,6 +16,7 @@ export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'starter',
     name: 'Humans',
+    imageUrl: '/nft/humans.png',
     priceCipher: 25_000,
     totalRoiAxn: 31_250,
     durationDays: 87,
@@ -25,6 +27,7 @@ export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'basic',
     name: 'Autobots',
+    imageUrl: '/nft/autobots.png',
     priceCipher: 75_000,
     totalRoiAxn: 93_750,
     durationDays: 81,
@@ -35,6 +38,7 @@ export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'advanced',
     name: 'Mercenaries',
+    imageUrl: '/nft/mercenaries.png',
     priceCipher: 200_000,
     totalRoiAxn: 250_000,
     durationDays: 62,
@@ -45,6 +49,7 @@ export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'pro',
     name: 'Maximals',
+    imageUrl: '/nft/maximals.png',
     priceCipher: 500_000,
     totalRoiAxn: 625_000,
     durationDays: 57,
@@ -55,6 +60,7 @@ export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'elite',
     name: 'Decepticons',
+    imageUrl: '/nft/decepticons.png',
     priceCipher: 1_200_000,
     totalRoiAxn: 1_500_000,
     durationDays: 56,
@@ -65,6 +71,7 @@ export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'ultra',
     name: 'Dinobots',
+    imageUrl: '/nft/dinobots.png',
     priceCipher: 2_500_000,
     totalRoiAxn: 3_125_000,
     durationDays: 52,
@@ -75,6 +82,7 @@ export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'mega',
     name: 'Terrorcons',
+    imageUrl: '/nft/terrorcons.png',
     priceCipher: 4_500_000,
     totalRoiAxn: 5_625_000,
     durationDays: 49,
@@ -85,6 +93,7 @@ export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'titan',
     name: 'Primes',
+    imageUrl: '/nft/primes.png',
     priceCipher: 7_500_000,
     totalRoiAxn: 9_375_000,
     durationDays: 47,
