@@ -150,7 +150,7 @@ function Router() {
     <>
       <Suspense fallback={null}>
         <Switch>
-          <Route path="/" component={() => { const [, setLocation] = useLocation(); setLocation("/game"); return null; }} />
+          <Route path="/" component={() => { const [, setLocation] = useLocation(); setLocation("/rewards"); return null; }} />
           <Route path="/earn" component={EarnPage} />
           <Route path="/add-mission" component={AddMissionPage} />
           <Route path="/watch" component={WatchPage} />
