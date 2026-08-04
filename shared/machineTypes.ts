@@ -4,6 +4,7 @@ export interface MachineType {
   id: string;
   name: string;
   imageUrl: string;
+  imageZoom?: number;      // display-only zoom to fill the card frame (does not modify the source image)
   priceCipher: number;     // price in CIPHER
   totalRoiAxn: number;     // total ROI in AXN
   durationDays: number;    // machine lifetime in days
@@ -17,6 +18,7 @@ export const MACHINE_TYPES: MachineType[] = [
     id: 'starter',
     name: 'Humans',
     imageUrl: '/nft/humans.webp',
+    imageZoom: 1.3,
     priceCipher: 25_000,
     totalRoiAxn: 31_250,
     durationDays: 87,
@@ -28,6 +30,7 @@ export const MACHINE_TYPES: MachineType[] = [
     id: 'basic',
     name: 'Autobots',
     imageUrl: '/nft/autobots.webp',
+    imageZoom: 1.15,
     priceCipher: 75_000,
     totalRoiAxn: 93_750,
     durationDays: 81,
@@ -39,6 +42,7 @@ export const MACHINE_TYPES: MachineType[] = [
     id: 'advanced',
     name: 'Mercenaries',
     imageUrl: '/nft/mercenaries.webp',
+    imageZoom: 1.1,
     priceCipher: 200_000,
     totalRoiAxn: 250_000,
     durationDays: 62,
@@ -50,6 +54,7 @@ export const MACHINE_TYPES: MachineType[] = [
     id: 'pro',
     name: 'Maximals',
     imageUrl: '/nft/maximals.webp',
+    imageZoom: 1.1,
     priceCipher: 500_000,
     totalRoiAxn: 625_000,
     durationDays: 57,
@@ -61,6 +66,7 @@ export const MACHINE_TYPES: MachineType[] = [
     id: 'elite',
     name: 'Decepticons',
     imageUrl: '/nft/decepticons.webp',
+    imageZoom: 1.1,
     priceCipher: 1_200_000,
     totalRoiAxn: 1_500_000,
     durationDays: 56,
@@ -72,6 +78,7 @@ export const MACHINE_TYPES: MachineType[] = [
     id: 'ultra',
     name: 'Dinobots',
     imageUrl: '/nft/dinobots.webp',
+    imageZoom: 1.25,
     priceCipher: 2_500_000,
     totalRoiAxn: 3_125_000,
     durationDays: 52,
@@ -83,6 +90,7 @@ export const MACHINE_TYPES: MachineType[] = [
     id: 'mega',
     name: 'Terrorcons',
     imageUrl: '/nft/terrorcons.webp',
+    imageZoom: 1.05,
     priceCipher: 4_500_000,
     totalRoiAxn: 5_625_000,
     durationDays: 49,
@@ -94,6 +102,7 @@ export const MACHINE_TYPES: MachineType[] = [
     id: 'titan',
     name: 'Primes',
     imageUrl: '/nft/primes.webp',
+    imageZoom: 1.25,
     priceCipher: 7_500_000,
     totalRoiAxn: 9_375_000,
     durationDays: 47,
