@@ -24,74 +24,98 @@ function fmtNum(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
-// ─── Machine Shop Card ───────────────────────────────────────────────
-function MachineShopCard({ machine, onBuy }: { machine: MachineType; onBuy: (m: MachineType) => void }) {
+// ─── Machine Shop Card (NFT-marketplace style) ────────────────────────
+// NOTE: card artwork is a placeholder gradient + monogram for now.
+// Once real artwork is provided, swap the placeholder block below for
+// an <img src={machine.imageUrl} /> — layout (pills, name, button) stays the same.
+const CARD_GRADIENTS = [
+  "linear-gradient(160deg, #1e3a8a 0%, #1d4ed8 55%, #3b82f6 100%)",
+  "linear-gradient(160deg, #312e81 0%, #4338ca 55%, #6366f1 100%)",
+  "linear-gradient(160deg, #164e63 0%, #0e7490 55%, #22d3ee 100%)",
+  "linear-gradient(160deg, #7c2d12 0%, #c2410c 55%, #fb923c 100%)",
+  "linear-gradient(160deg, #3f0d1e 0%, #9f1239 55%, #f43f5e 100%)",
+  "linear-gradient(160deg, #052e16 0%, #15803d 55%, #4ade80 100%)",
+  "linear-gradient(160deg, #422006 0%, #a16207 55%, #facc15 100%)",
+  "linear-gradient(160deg, #2e1065 0%, #7e22ce 55%, #c084fc 100%)",
+];
+
+function MachineShopCard({ machine, index, onBuy }: { machine: MachineType; index: number; onBuy: (m: MachineType) => void }) {
+  const gradient = CARD_GRADIENTS[index % CARD_GRADIENTS.length];
+
   return (
-    <div style={{
-      background: "rgba(255,255,255,0.07)",
-      borderRadius: 16,
-      padding: "18px 18px",
-      marginBottom: 12,
-    }}>
-      {/* Top row: name + price button */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 12,
-            background: "rgba(255,255,255,0.06)",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="7" width="20" height="14" rx="2"/>
-              <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-              <circle cx="12" cy="14" r="2"/>
-            </svg>
-          </div>
-          <div>
-            <div style={{ color: "#fff", fontSize: 15, fontWeight: 800, lineHeight: 1.2 }}>{machine.name}</div>
-            <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 3 }}>{machine.durationDays} days active</div>
-          </div>
+    <div style={{ width: 152, flexShrink: 0, scrollSnapAlign: "start" }}>
+      {/* Artwork */}
+      <button
+        onClick={() => onBuy(machine)}
+        style={{
+          position: "relative", width: "100%", aspectRatio: "1 / 1",
+          borderRadius: 16, overflow: "hidden", border: "none", padding: 0,
+          background: gradient, cursor: "pointer", display: "block",
+        }}
+        className="active:scale-95 transition-transform"
+      >
+        {/* Monogram placeholder */}
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 34, fontWeight: 900, color: "rgba(255,255,255,0.28)",
+          letterSpacing: "-0.5px",
+        }}>
+          {machine.name.slice(0, 2).toUpperCase()}
         </div>
-        <button
-          onClick={() => onBuy(machine)}
-          style={{
-            background: "linear-gradient(135deg, #2563eb, #3b82f6)",
-            color: "#fff", border: "none",
-            borderRadius: 10, padding: "9px 16px",
-            fontSize: 12, fontWeight: 800,
-            cursor: "pointer", flexShrink: 0,
-            letterSpacing: "0.03em",
-            boxShadow: "0 2px 12px rgba(37,99,235,0.4)",
-            whiteSpace: "nowrap",
-          }}
-          className="active:scale-95 transition-transform"
-        >
-          {fmtNum(machine.priceCipher)} CIPHER
-        </button>
+
+        {/* Duration pill — top right */}
+        <div style={{
+          position: "absolute", top: 8, right: 8,
+          background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)",
+          borderRadius: 20, padding: "3px 8px",
+          fontSize: 9, fontWeight: 800, color: "#fff",
+        }}>
+          {machine.durationDays}d
+        </div>
+
+        {/* Price pill — bottom left, overlaid on image */}
+        <div style={{
+          position: "absolute", left: 8, right: 8, bottom: 8,
+          background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
+          borderRadius: 20, padding: "5px 8px",
+          display: "flex", alignItems: "center", gap: 5,
+        }}>
+          <div style={{ width: 14, height: 14, borderRadius: "50%", overflow: "hidden", flexShrink: 0 }}>
+            <img src="/cipher-icon.jpg" alt="CIPHER" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums" }}>
+            {fmtNum(machine.priceCipher)}
+          </span>
+        </div>
+      </button>
+
+      {/* Name + rate */}
+      <div style={{ marginTop: 8, padding: "0 2px" }}>
+        <div style={{ color: "#fff", fontSize: 13, fontWeight: 800, lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {machine.name}
+        </div>
+        <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 2, whiteSpace: "nowrap" }}>
+          {fmtNum(machine.hourlyAxn)} AXN/hr
+        </div>
       </div>
 
-      {/* Stats row */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
-        gap: 8,
-      }}>
-        {[
-          { label: "Hourly", value: fmtNum(machine.hourlyAxn) + " AXN" },
-          { label: "Daily",  value: fmtNum(machine.dailyAxn)  + " AXN" },
-          { label: "Total ROI", value: fmtNum(machine.totalRoiAxn) + " AXN" },
-        ].map(stat => (
-          <div key={stat.label} style={{
-            background: "rgba(0,0,0,0.2)",
-            borderRadius: 10, padding: "10px 10px",
-            textAlign: "center",
-          }}>
-            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 4 }}>
-              {stat.label}
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>{stat.value}</div>
-          </div>
-        ))}
-      </div>
+      {/* Buy button */}
+      <button
+        onClick={() => onBuy(machine)}
+        style={{
+          width: "100%", marginTop: 8,
+          background: "linear-gradient(135deg, #2563eb, #3b82f6)",
+          color: "#fff", border: "none",
+          borderRadius: 10, padding: "8px 0",
+          fontSize: 11, fontWeight: 800,
+          cursor: "pointer", letterSpacing: "0.03em",
+          boxShadow: "0 2px 12px rgba(37,99,235,0.4)",
+        }}
+        className="active:scale-95 transition-transform"
+      >
+        BUY
+      </button>
     </div>
   );
 }
@@ -426,19 +450,43 @@ export default function MachinePage() {
           </>
         )}
 
-        {/* ─── MACHINE SHOP ─── */}
+        {/* ─── NFT MARKETPLACE ─── */}
         <div style={{ marginBottom: 14 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.28)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            Machine Shop
-          </span>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 3 }}>
-            Buy with CIPHER · Earn passive AXN every hour
+          <div style={{ fontSize: 20, fontWeight: 900, color: "#fff", letterSpacing: "-0.3px" }}>
+            NFT Marketplace
+          </div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 4, lineHeight: 1.5 }}>
+            Buy NFTs using CIPHER and earn passive AXN rewards until the maximum ROI is reached.
           </div>
         </div>
 
-        {MACHINE_TYPES.map(m => (
-          <MachineShopCard key={m.id} machine={m} onBuy={setConfirmMachine} />
-        ))}
+        {/* Row 1 — first 4 */}
+        <div
+          className="scrollbar-hide"
+          style={{
+            display: "flex", gap: 12, overflowX: "auto", overflowY: "hidden",
+            WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory",
+            paddingBottom: 4, marginBottom: 16,
+          }}
+        >
+          {MACHINE_TYPES.slice(0, 4).map((m, i) => (
+            <MachineShopCard key={m.id} machine={m} index={i} onBuy={setConfirmMachine} />
+          ))}
+        </div>
+
+        {/* Row 2 — last 4 */}
+        <div
+          className="scrollbar-hide"
+          style={{
+            display: "flex", gap: 12, overflowX: "auto", overflowY: "hidden",
+            WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory",
+            paddingBottom: 4,
+          }}
+        >
+          {MACHINE_TYPES.slice(4, 8).map((m, i) => (
+            <MachineShopCard key={m.id} machine={m} index={i + 4} onBuy={setConfirmMachine} />
+          ))}
+        </div>
       </div>
 
       {confirmMachine && (
