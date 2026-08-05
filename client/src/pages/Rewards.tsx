@@ -45,8 +45,6 @@ function FarmingCard({
   now: number;
 }) {
   const activeMachines = machines.filter(machine => new Date(machine.expiresAt).getTime() > now);
-  const totalUnclaimed = machines.reduce((sum, machine) => sum + getMachineUnclaimed(machine, machineType, now), 0);
-  const totalClaimed = machines.reduce((sum, machine) => sum + parseFloat(machine.totalClaimedAxn || "0"), 0);
   const progress = activeMachines.length > 0
     ? Math.max(...activeMachines.map(machine => {
         const purchasedAt = new Date(machine.purchasedAt).getTime();
@@ -85,12 +83,6 @@ function FarmingCard({
             {machines.length > 1 && <span style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}> · {machines.length} purchases</span>}
           </div>
         </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ color: activeMachines.length > 0 ? '#4ade80' : 'rgba(255,255,255,0.35)', fontSize: 17, fontWeight: 900 }}>
-            +{fmtNum(totalUnclaimed)}
-          </div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 2 }}>AXN unclaimed</div>
-        </div>
       </div>
 
       <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
@@ -100,29 +92,10 @@ function FarmingCard({
         }} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 14 }}>
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Farming progress</div>
-          <div style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>{Math.round(progress * 100)}%</div>
-        </div>
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Farming rewards</div>
-          <div style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>{fmtNum(totalUnclaimed)} AXN</div>
-        </div>
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Remaining time</div>
-          <div style={{ color: activeMachines.length > 0 ? '#fff' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
-            {fmtCountdown(remainingSeconds)}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 11 }}>
-        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>
-          Earned: {fmtNum(totalClaimed)} AXN · {fmtNum(machineType.hourlyAxn)} AXN/hr
-        </div>
-        <div style={{ color: activeMachines.length > 0 ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: 700 }}>
-          {activeMachines.length > 0 ? 'Farming active' : 'Expired'}
+      <div>
+        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Remaining time</div>
+        <div style={{ color: activeMachines.length > 0 ? '#fff' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+          {fmtCountdown(remainingSeconds)}
         </div>
       </div>
     </div>
@@ -409,26 +382,10 @@ export default function Rewards() {
         ) : (
           <>
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               background: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: '11px 14px', marginBottom: 12,
             }}>
-              <div>
-                <div style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>{fmtNum(totalUnclaimed)} AXN</div>
-                <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 11, marginTop: 2 }}>Total unclaimed farming rewards</div>
-              </div>
-              <button
-                onClick={() => claimMutation.mutate()}
-                disabled={totalUnclaimed < 1 || claimMutation.isPending}
-                style={{
-                  background: totalUnclaimed >= 1 ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.06)',
-                  color: totalUnclaimed >= 1 ? '#fff' : 'rgba(255,255,255,0.25)',
-                  border: 'none', borderRadius: 10, padding: '9px 15px',
-                  fontSize: 11, fontWeight: 800, cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed',
-                }}
-                className="active:scale-95 transition-transform"
-              >
-                {claimMutation.isPending ? 'CLAIMING…' : 'CLAIM AXN'}
-              </button>
+              <div style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>{fmtNum(totalUnclaimed)} AXN</div>
+              <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 11, marginTop: 2 }}>Total unclaimed farming rewards</div>
             </div>
             {ownedMachineTypes.map(machineType => (
               <FarmingCard
