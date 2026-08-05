@@ -1181,7 +1181,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = req.user?.user;
       if (!user) return res.status(401).json({ message: "Not authenticated" });
-      const result = await storage.claimMachineRewards(user.id);
+      const { machineType } = req.body || {};
+      const result = await storage.claimMachineRewards(user.id, machineType);
       if (!result.success) return res.status(400).json(result);
       res.json(result);
     } catch (error) {

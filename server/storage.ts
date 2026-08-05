@@ -161,7 +161,7 @@ export interface IStorage {
   // Machine operations
   getUserMachines(userId: string): Promise<UserMachine[]>;
   purchaseMachine(userId: string, machineType: string): Promise<{ success: boolean; message: string; machine?: UserMachine }>;
-  claimMachineRewards(userId: string): Promise<{ success: boolean; amount: number; message: string }>;
+  claimMachineRewards(userId: string, machineType?: string): Promise<{ success: boolean; amount: number; message: string }>;
   getMachineStats(userId: string): Promise<{
     totalMachines: number;
     activeMachines: number;
@@ -2957,17 +2957,23 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async claimMachineRewards(userId: string): Promise<{ success: boolean; amount: number; message: string }> {
+  async claimMachineRewards(userId: string, machineType?: string): Promise<{ success: boolean; amount: number; message: string }> {
     const { pool } = await import('./db');
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
       // Lock all user machines for this session — prevents concurrent claims
-      const machinesResult = await client.query(
-        `SELECT * FROM user_machines WHERE user_id = $1 FOR UPDATE`,
-        [userId]
-      );
+      // If machineType is provided, only claim rewards from that NFT type
+      const machinesResult = machineType
+        ? await client.query(
+            `SELECT * FROM user_machines WHERE user_id = $1 AND machine_type = $2 FOR UPDATE`,
+            [userId, machineType]
+          )
+        : await client.query(
+            `SELECT * FROM user_machines WHERE user_id = $1 FOR UPDATE`,
+            [userId]
+          );
 
       const machines = machinesResult.rows;
       if (machines.length === 0) {
@@ -3026,7 +3032,7 @@ export class DatabaseStorage implements IStorage {
       );
 
       await client.query('COMMIT');
-      return { success: true, amount: totalFlooredAxn, message: `Claimed ${totalFlooredAxn.toLocaleString()} AXN from your machines!` };
+      return { success: true, amount: totalFlooredAxn, message: `Claimed ${totalFlooredAxn.toLocaleString()} AXN!` };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
