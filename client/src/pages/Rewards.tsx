@@ -175,12 +175,6 @@ function FarmingCard({
   const hourlyEarnings = level * machineType.hourlyAxn;
   const dailyEarnings = hourlyEarnings * 24;
   const totalUnclaimed = machines.reduce((sum, machine) => sum + getMachineUnclaimed(machine, machineType, now), 0);
-  const progress = activeMachines.length > 0
-    ? Math.max(...activeMachines.map(machine => {
-        const purchasedAt = new Date(machine.purchasedAt).getTime();
-        return Math.min(1, Math.max(0, (now - purchasedAt) / (machineType.durationHours * 3_600_000)));
-      }))
-    : 1;
   const remainingSeconds = activeMachines.length > 0
     ? Math.max(0, Math.floor((Math.min(...activeMachines.map(machine => new Date(machine.expiresAt).getTime())) - now) / 1000))
     : 0;
@@ -212,7 +206,7 @@ function FarmingCard({
       {/* Main row: icon + name/level */}
       <div
         onClick={() => setShowDetails(true)}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px', cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 14px 18px', cursor: 'pointer' }}
         className="active:scale-[0.99] transition-transform"
       >
         <div style={{ width: 50, height: 50, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#16181d' }}>
@@ -232,35 +226,32 @@ function FarmingCard({
           <div style={{ color: '#fff', fontSize: 15, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {machineType.name}
           </div>
-          <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hr
-          </div>
           <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 11, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Level {level}/10
+          </div>
+          <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hr
           </div>
         </div>
       </div>
 
-      {/* Daily earnings + progress + remaining time */}
-      <div style={{ padding: '0 14px 14px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+      {/* Three-column earnings and remaining time */}
+      <div style={{ padding: '0 14px 18px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 4 }}>Hourly Earnings</div>
+            <div style={{ color: '#fff', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>{hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hr</div>
+          </div>
           <div>
             <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Daily Earnings</div>
-            <div style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>{dailyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/day</div>
+            <div style={{ color: '#fff', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>{dailyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/day</div>
           </div>
           <div>
             <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Remaining Time</div>
-            <div style={{ color: activeMachines.length > 0 ? '#fff' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ color: activeMachines.length > 0 ? '#fff' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
               {fmtCountdown(remainingSeconds)}
             </div>
           </div>
-        </div>
-
-        <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', width: `${progress * 100}%`, borderRadius: 4,
-            background: activeMachines.length > 0 ? 'linear-gradient(90deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.14)',
-          }} />
         </div>
       </div>
 
@@ -604,7 +595,7 @@ export default function Rewards() {
             </div>
           </div>
           <div style={{ color: '#fff', fontSize: 12, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap', textAlign: 'right' }}>
-            ({fmtGram(totalHourlyRate)} GRAM) {fmtNum(totalHourlyRate)} AXN/hr
+            ({fmtGram(totalHourlyRate)} GRAM) • {fmtNum(totalHourlyRate)} AXN/hr
           </div>
         </div>
 
