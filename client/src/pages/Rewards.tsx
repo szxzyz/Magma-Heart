@@ -44,10 +44,12 @@ function FarmingCard({
   machines: any[];
   now: number;
 }) {
+  const queryClient = useQueryClient();
   const activeMachines = machines.filter(machine => new Date(machine.expiresAt).getTime() > now);
   const level = Math.min(machines.length, 10);
   const hourlyEarnings = level * machineType.hourlyAxn;
   const dailyEarnings = hourlyEarnings * 24;
+  const totalUnclaimed = machines.reduce((sum, machine) => sum + getMachineUnclaimed(machine, machineType, now), 0);
   const progress = activeMachines.length > 0
     ? Math.max(...activeMachines.map(machine => {
         const purchasedAt = new Date(machine.purchasedAt).getTime();
@@ -57,6 +59,21 @@ function FarmingCard({
   const remainingSeconds = activeMachines.length > 0
     ? Math.max(0, Math.floor((Math.min(...activeMachines.map(machine => new Date(machine.expiresAt).getTime())) - now) / 1000))
     : 0;
+
+  const claimMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/machines/claim', { machineType: machineType.id });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to claim');
+      return data;
+    },
+    onSuccess: (data) => {
+      showNotification(`${machineType.name} rewards claimed! +${data.amount} AXN`, 'success');
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/machines'] });
+    },
+    onError: (err: any) => showNotification(err?.message || 'Failed to claim rewards', 'error'),
+  });
 
   return (
     <div style={{
@@ -112,6 +129,23 @@ function FarmingCard({
           {fmtCountdown(remainingSeconds)}
         </div>
       </div>
+
+      <button
+        onClick={() => totalUnclaimed >= 1 && claimMutation.mutate()}
+        disabled={totalUnclaimed < 1 || claimMutation.isPending}
+        style={{
+          width: '100%', marginTop: 14,
+          background: totalUnclaimed >= 1 ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.08)',
+          color: totalUnclaimed >= 1 ? '#fff' : 'rgba(255,255,255,0.35)', border: 'none',
+          borderRadius: 10, padding: '8px 0',
+          fontSize: 11, fontWeight: 800,
+          cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed', letterSpacing: '0.03em',
+          boxShadow: totalUnclaimed >= 1 ? '0 2px 12px rgba(37,99,235,0.4)' : 'none',
+        }}
+        className="active:scale-95 transition-transform"
+      >
+        {claimMutation.isPending ? 'CLAIMING…' : `CLAIM ${fmtNum(totalUnclaimed)} AXN`}
+      </button>
     </div>
   );
 }
@@ -251,11 +285,6 @@ export default function Rewards() {
     onError: (err: any) => showNotification(err?.message || 'Failed to claim farming rewards', 'error'),
   });
 
-  const totalUnclaimed = ownedMachineTypes.reduce((sum, machineType) => (
-    sum + (machinesByType[machineType.id] || []).reduce((groupSum, machine) => (
-      groupSum + getMachineUnclaimed(machine, machineType, now)
-    ), 0)
-  ), 0);
   const totalHourlyRate = ownedMachineTypes.reduce((sum, machineType) => (
     sum + (machinesByType[machineType.id] || []).filter(machine => new Date(machine.expiresAt).getTime() > now).length * machineType.hourlyAxn
   ), 0);
@@ -395,12 +424,6 @@ export default function Rewards() {
           </div>
         ) : (
           <>
-            <div style={{
-              background: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: '11px 14px', marginBottom: 12,
-            }}>
-              <div style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>{fmtNum(totalUnclaimed)} AXN</div>
-              <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 11, marginTop: 2 }}>Total unclaimed farming rewards</div>
-            </div>
             {ownedMachineTypes.map(machineType => (
               <FarmingCard
                 key={machineType.id}
