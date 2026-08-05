@@ -45,6 +45,9 @@ function FarmingCard({
   now: number;
 }) {
   const activeMachines = machines.filter(machine => new Date(machine.expiresAt).getTime() > now);
+  const level = Math.min(machines.length, 10);
+  const hourlyEarnings = level * machineType.hourlyAxn;
+  const dailyEarnings = hourlyEarnings * 24;
   const progress = activeMachines.length > 0
     ? Math.max(...activeMachines.map(machine => {
         const purchasedAt = new Date(machine.purchasedAt).getTime();
@@ -79,9 +82,20 @@ function FarmingCard({
             {machineType.name}
           </div>
           <div style={{ color: '#60a5fa', fontSize: 12, fontWeight: 800, marginTop: 3 }}>
-            Level {Math.min(machines.length, 10)}/10
+            Level {level}/10
             {machines.length > 1 && <span style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}> · {machines.length} purchases</span>}
           </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 15 }}>
+        <div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Hourly Earnings</div>
+          <div style={{ color: '#4ade80', fontSize: 13, fontWeight: 800 }}>{hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hour</div>
+        </div>
+        <div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Daily Earnings</div>
+          <div style={{ color: '#4ade80', fontSize: 13, fontWeight: 800 }}>{dailyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/day</div>
         </div>
       </div>
 
