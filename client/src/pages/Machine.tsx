@@ -12,6 +12,10 @@ function fmtNum(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
+function fmtGram(axn: number): string {
+  return (axn / 100_000).toFixed(3);
+}
+
 // ─── Machine Shop Card (NFT-marketplace style) ────────────────────────
 function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; level: number; onBuy: (m: MachineType) => void }) {
   const isMaxLevel = level >= 10;
@@ -61,19 +65,19 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
           {machine.durationDays}d
         </div>
 
-        {/* Price pill — bottom left, overlaid on image */}
+        {/* Expected reward — bottom left, overlaid on image */}
         <div style={{
           position: "absolute", left: 8, right: 8, bottom: 8,
-          background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
-          borderRadius: 20, padding: "5px 8px",
-          display: "flex", alignItems: "center", gap: 5,
+          background: "rgba(0,0,0,0.62)", backdropFilter: "blur(4px)",
+          borderRadius: 12, padding: "6px 9px",
+          textAlign: "left",
         }}>
-          <div style={{ width: 14, height: 14, borderRadius: "50%", overflow: "hidden", flexShrink: 0 }}>
-            <img src="/cipher-icon.jpg" alt="CIPHER" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          <div style={{ color: "rgba(255,255,255,0.58)", fontSize: 8, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            AXN Reward
           </div>
-          <span style={{ fontSize: 10, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums" }}>
-            {fmtNum(machine.priceCipher)}
-          </span>
+          <div style={{ color: "#fff", fontSize: 13, fontWeight: 900, lineHeight: 1.2, fontVariantNumeric: "tabular-nums" }}>
+            {fmtNum(machine.totalRoiAxn)} <span style={{ color: "rgba(255,255,255,0.72)", fontSize: 9, fontWeight: 700 }}>({fmtGram(machine.totalRoiAxn)} GRAM)</span>
+          </div>
         </div>
       </button>
 
@@ -269,33 +273,33 @@ export default function MachinePage() {
           </div>
         </div>
 
-        {/* Row 1 — first 4 */}
-        <div
-          className="scrollbar-hide"
-          style={{
-            display: "flex", gap: 12, overflowX: "auto", overflowY: "hidden",
-            WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory",
-            paddingBottom: 4, marginBottom: 16,
-          }}
-        >
-          {MACHINE_TYPES.slice(0, 4).map(m => (
-            <MachineShopCard key={m.id} machine={m} level={getLevel(m.id)} onBuy={setConfirmMachine} />
-          ))}
-        </div>
-
-        {/* Row 2 — last 4 */}
-        <div
-          className="scrollbar-hide"
-          style={{
-            display: "flex", gap: 12, overflowX: "auto", overflowY: "hidden",
-            WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory",
-            paddingBottom: 4,
-          }}
-        >
-          {MACHINE_TYPES.slice(4, 8).map(m => (
-            <MachineShopCard key={m.id} machine={m} level={getLevel(m.id)} onBuy={setConfirmMachine} />
-          ))}
-        </div>
+        {([
+          { name: "Common", machines: MACHINE_TYPES.slice(0, 2) },
+          { name: "Uncommon", machines: MACHINE_TYPES.slice(2, 4) },
+          { name: "Rare", machines: MACHINE_TYPES.slice(4, 6) },
+          { name: "Legendary", machines: MACHINE_TYPES.slice(6, 8) },
+        ] as const).map(category => (
+          <section key={category.name} style={{ marginBottom: 18 }}>
+            <div style={{
+              color: "rgba(255,255,255,0.7)", fontSize: 11, fontWeight: 800,
+              letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 9,
+            }}>
+              {category.name}
+            </div>
+            <div
+              className="scrollbar-hide"
+              style={{
+                display: "flex", gap: 12, overflowX: "auto", overflowY: "hidden",
+                WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory",
+                paddingBottom: 4,
+              }}
+            >
+              {category.machines.map(m => (
+                <MachineShopCard key={m.id} machine={m} level={getLevel(m.id)} onBuy={setConfirmMachine} />
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
 
       {confirmMachine && (
