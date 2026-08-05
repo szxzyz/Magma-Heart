@@ -269,6 +269,9 @@ export default function Rewards() {
       groupSum + getMachineUnclaimed(machine, machineType, now)
     ), 0)
   ), 0);
+  const totalHourlyRate = ownedMachineTypes.reduce((sum, machineType) => (
+    sum + (machinesByType[machineType.id] || []).filter(machine => new Date(machine.expiresAt).getTime() > now).length * machineType.hourlyAxn
+  ), 0);
   // The legacy markup below is hidden and intentionally disconnected from the API.
   const farmData = { isActive: false };
   const farmStartMutation = { isPending: false, mutate: () => undefined };
@@ -377,13 +380,19 @@ export default function Rewards() {
           </div>
         </div>
 
-        {/* FARMING label */}
-        <div style={{ marginBottom: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Farming
-          </span>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>
-            Rewards are generated only by NFTs you own.
+        {/* MY NFTS label */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              <span style={{ color: 'rgba(255,255,255,0.28)' }}>My </span>
+              <span style={{ color: '#3b82f6' }}>NFTs</span>
+            </span>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>
+              Rewards are generated only by NFTs you own.
+            </div>
+          </div>
+          <div style={{ color: '#4ade80', fontSize: 12, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {fmtNum(totalHourlyRate)} AXN/hr
           </div>
         </div>
 
