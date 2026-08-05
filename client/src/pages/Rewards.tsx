@@ -47,6 +47,16 @@ function getMachineStatus(remainingSeconds: number): { label: string; color: str
   return { label: 'Active', color: '#4ade80' };
 }
 
+const CLAIM_WINDOW_MS = 12 * 3_600_000;
+
+// Rewards accrue continuously off lastClaimedAt regardless of this window —
+// this is purely a reminder to the user, never a cap, pause, or reset.
+function getClaimWindow(machine: any, now: number): { overdue: boolean; hoursSinceClaim: number } {
+  const lastClaimed = new Date(machine.lastClaimedAt || machine.purchasedAt).getTime();
+  const hoursSinceClaim = Math.max(0, (now - lastClaimed) / 3_600_000);
+  return { overdue: now - lastClaimed >= CLAIM_WINDOW_MS, hoursSinceClaim };
+}
+
 function NFTDetailsSheet({
   machineType,
   machines,
@@ -97,6 +107,8 @@ function NFTDetailsSheet({
           const remainingSeconds = Math.max(0, Math.floor((expiresAt - now) / 1000));
           const status = getMachineStatus(remainingSeconds);
           const currentReward = getMachineUnclaimed(machine, machineType, now);
+          const claimWindow = getClaimWindow(machine, now);
+          const showClaimReminder = remainingSeconds > 0 && claimWindow.overdue;
 
           return (
             <div key={machine.id ?? idx} style={{
@@ -121,10 +133,16 @@ function NFTDetailsSheet({
                 <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Expiry time</span>
                 <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>{fmtDateTime(machine.expiresAt)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: showClaimReminder ? 8 : 0, marginBottom: showClaimReminder ? 8 : 0, borderBottom: showClaimReminder ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                 <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Current reward</span>
                 <span style={{ color: '#4ade80', fontSize: 12, fontWeight: 800 }}>{fmtNum(currentReward)} AXN</span>
               </div>
+              {showClaimReminder && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#facc15', fontSize: 11 }}>⏰ Claim overdue</span>
+                  <span style={{ color: '#facc15', fontSize: 11, fontWeight: 700 }}>{Math.floor(claimWindow.hoursSinceClaim)}h since last claim</span>
+                </div>
+              )}
             </div>
           );
         })}
@@ -146,6 +164,7 @@ function FarmingCard({
 }) {
   const queryClient = useQueryClient();
   const [showDetails, setShowDetails] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
   const activeMachines = machines.filter(machine => new Date(machine.expiresAt).getTime() > now);
   const level = Math.min(machines.length, 10);
   const hourlyEarnings = level * machineType.hourlyAxn;
@@ -160,6 +179,7 @@ function FarmingCard({
   const remainingSeconds = activeMachines.length > 0
     ? Math.max(0, Math.floor((Math.min(...activeMachines.map(machine => new Date(machine.expiresAt).getTime())) - now) / 1000))
     : 0;
+  const claimOverdue = activeMachines.some(machine => getClaimWindow(machine, now).overdue);
 
   const claimMutation = useMutation({
     mutationFn: async () => {
@@ -179,15 +199,18 @@ function FarmingCard({
   return (
     <>
     <div
-      onClick={() => setShowDetails(true)}
       style={{
-        background: 'rgba(255,255,255,0.07)', borderRadius: 16, padding: '16px',
-        marginBottom: 12, opacity: activeMachines.length > 0 ? 1 : 0.58, cursor: 'pointer',
+        background: 'rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden',
+        marginBottom: 12, opacity: activeMachines.length > 0 ? 1 : 0.58,
       }}
-      className="active:scale-[0.99] transition-transform"
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 }}>
-        <div style={{ width: 54, height: 54, borderRadius: 14, overflow: 'hidden', flexShrink: 0, background: '#16181d' }}>
+      {/* Main row: icon + name/level */}
+      <div
+        onClick={() => setShowDetails(true)}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px', cursor: 'pointer' }}
+        className="active:scale-[0.99] transition-transform"
+      >
+        <div style={{ width: 50, height: 50, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#16181d' }}>
           <img
             src={machineType.imageUrl}
             alt={machineType.name}
@@ -200,58 +223,92 @@ function FarmingCard({
             }}
           />
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: '#fff', fontSize: 16, fontWeight: 800 }}>
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ color: '#fff', fontSize: 15, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {machineType.name}
           </div>
-          <div style={{ color: '#60a5fa', fontSize: 12, fontWeight: 800, marginTop: 3 }}>
+          <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 12, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Level {level}/10
-            {machines.length > 1 && <span style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}> · {machines.length} purchases</span>}
+            {machines.length > 1 && <span> · {machines.length} purchases</span>}
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 15 }}>
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Hourly Earnings</div>
-          <div style={{ color: '#4ade80', fontSize: 13, fontWeight: 800 }}>{hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hour</div>
+      {/* Earnings + progress + remaining time */}
+      <div style={{ padding: '0 14px 14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Hourly Earnings</div>
+            <div style={{ color: '#4ade80', fontSize: 13, fontWeight: 800 }}>{hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hour</div>
+          </div>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Daily Earnings</div>
+            <div style={{ color: '#4ade80', fontSize: 13, fontWeight: 800 }}>{dailyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/day</div>
+          </div>
         </div>
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Daily Earnings</div>
-          <div style={{ color: '#4ade80', fontSize: 13, fontWeight: 800 }}>{dailyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/day</div>
+
+        <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
+          <div style={{
+            height: '100%', width: `${progress * 100}%`, borderRadius: 4,
+            background: activeMachines.length > 0 ? 'linear-gradient(90deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.14)',
+          }} />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Remaining time</div>
+            <div style={{ color: activeMachines.length > 0 ? '#fff' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+              {fmtCountdown(remainingSeconds)}
+            </div>
+          </div>
+          {claimOverdue && (
+            <div style={{ color: '#facc15', fontSize: 11, fontWeight: 700 }}>
+              ⏰ Claim overdue
+            </div>
+          )}
         </div>
       </div>
 
-      <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-        <div style={{
-          height: '100%', width: `${progress * 100}%`, borderRadius: 4,
-          background: activeMachines.length > 0 ? 'linear-gradient(90deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.14)',
-        }} />
-      </div>
+      {/* Divider */}
+      <div style={{ height: 1, background: 'rgba(255,255,255,0.05)' }} />
 
-      <div>
-        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Remaining time</div>
-        <div style={{ color: activeMachines.length > 0 ? '#fff' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
-          {fmtCountdown(remainingSeconds)}
-        </div>
+      {/* Sub-row: Info | Claim | Warning */}
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowDetails(true); }}
+          style={{ flex: 1, padding: '11px 0', background: 'none', border: 'none', color: 'rgba(255,255,255,0.38)', fontSize: 15, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          className="active:scale-95 transition-transform"
+        >
+          ?
+        </button>
+        <div style={{ width: 1, background: 'rgba(255,255,255,0.05)' }} />
+        {claimMutation.isPending ? (
+          <button disabled style={{ flex: 3, padding: '11px 0', background: 'none', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: 'rgba(255,255,255,0.28)', fontSize: 12, fontWeight: 700, cursor: 'default' }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.4)', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+            Claiming…
+          </button>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); totalUnclaimed >= 1 && claimMutation.mutate(); }}
+            disabled={totalUnclaimed < 1}
+            style={{ flex: 3, padding: '11px 0', background: 'none', border: 'none', cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: totalUnclaimed >= 1 ? '#22c55e' : 'rgba(255,255,255,0.28)', fontSize: 12, fontWeight: 800, letterSpacing: '0.05em' }}
+            className="active:scale-95 transition-transform"
+          >
+            {totalUnclaimed >= 1 ? `CLAIM ${fmtNum(totalUnclaimed)} AXN` : 'CLAIM'}
+          </button>
+        )}
+        <div style={{ width: 1, background: 'rgba(255,255,255,0.05)' }} />
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowWarning(true); }}
+          style={{ flex: 1, padding: '11px 0', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          className="active:scale-95 transition-transform"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={claimOverdue ? '#facc15' : 'rgba(255,255,255,0.38)'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </button>
       </div>
-
-      <button
-        onClick={(e) => { e.stopPropagation(); totalUnclaimed >= 1 && claimMutation.mutate(); }}
-        disabled={totalUnclaimed < 1 || claimMutation.isPending}
-        style={{
-          width: '100%', marginTop: 14,
-          background: totalUnclaimed >= 1 ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.08)',
-          color: totalUnclaimed >= 1 ? '#fff' : 'rgba(255,255,255,0.35)', border: 'none',
-          borderRadius: 10, padding: '8px 0',
-          fontSize: 11, fontWeight: 800,
-          cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed', letterSpacing: '0.03em',
-          boxShadow: totalUnclaimed >= 1 ? '0 2px 12px rgba(37,99,235,0.4)' : 'none',
-        }}
-        className="active:scale-95 transition-transform"
-      >
-        {claimMutation.isPending ? 'CLAIMING…' : `CLAIM ${fmtNum(totalUnclaimed)} AXN`}
-      </button>
     </div>
 
     {showDetails && (
@@ -261,6 +318,33 @@ function FarmingCard({
         now={now}
         onClose={() => setShowDetails(false)}
       />
+    )}
+
+    {showWarning && (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'flex-end' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={() => setShowWarning(false)} />
+        <div style={{ position: 'relative', width: '100%', background: 'linear-gradient(160deg, #0d0d0f, #111118)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '28px 28px 0 0', padding: '28px 20px', paddingBottom: 'max(48px, calc(env(safe-area-inset-bottom, 0px) + 24px))', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)' }} />
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '0 auto 24px' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <div style={{ width: 54, height: 54, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={claimOverdue ? '#facc15' : 'rgba(255,255,255,0.5)'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginBottom: 10 }}>
+              {claimOverdue ? 'Claim Overdue' : 'All Good'}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, lineHeight: 1.6, marginBottom: 24 }}>
+              {claimOverdue
+                ? `It's been over 12 hours since you last claimed ${machineType.name} rewards. Rewards keep accumulating, but claiming regularly is your responsibility — the plan itself never pauses or resets.`
+                : `${machineType.name} is running on schedule. Rewards accumulate continuously — remember to claim within 12 hours.`}
+            </div>
+            <button onClick={() => setShowWarning(false)} style={{ width: '100%', padding: '14px 0', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 800, cursor: 'pointer' }} className="active:scale-95 transition-transform">OK</button>
+          </div>
+        </div>
+      </div>
     )}
     </>
   );
