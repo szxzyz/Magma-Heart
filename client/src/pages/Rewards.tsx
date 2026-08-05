@@ -35,6 +35,106 @@ function getMachineUnclaimed(machine: any, machineType: any, now: number): numbe
   return Math.floor(((effectiveNow - lastClaimed) / 3_600_000) * machineType.hourlyAxn);
 }
 
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function getMachineStatus(remainingSeconds: number): { label: string; color: string } {
+  if (remainingSeconds <= 0) return { label: 'Expired', color: 'rgba(255,255,255,0.35)' };
+  if (remainingSeconds <= 3600) return { label: 'Ending Soon', color: '#facc15' };
+  return { label: 'Active', color: '#4ade80' };
+}
+
+function NFTDetailsSheet({
+  machineType,
+  machines,
+  now,
+  onClose,
+}: {
+  machineType: any;
+  machines: any[];
+  now: number;
+  onClose: () => void;
+}) {
+  const sortedMachines = [...machines].sort((a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime());
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'flex-end' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={onClose} />
+      <div style={{
+        position: 'relative', width: '100%', maxHeight: '82vh', overflowY: 'auto',
+        background: 'linear-gradient(160deg, #0d0d0f, #111118)', border: '1px solid rgba(255,255,255,0.06)',
+        borderRadius: '28px 28px 0 0', padding: '28px 20px',
+        paddingBottom: 'max(48px, calc(env(safe-area-inset-bottom, 0px) + 24px))',
+      }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, #2563eb, #3b82f6, #2563eb, transparent)' }} />
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '0 auto 24px' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, overflow: 'hidden', flexShrink: 0, background: '#16181d' }}>
+            <img
+              src={machineType.imageUrl}
+              alt={machineType.name}
+              style={{
+                width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                objectPosition: machineType.imagePosition ?? '50% 50%',
+                transform: `scale(${machineType.imageZoom ?? 1})`, transformOrigin: 'center center',
+              }}
+            />
+          </div>
+          <div>
+            <div style={{ color: '#fff', fontSize: 17, fontWeight: 900 }}>{machineType.name}</div>
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>
+              {machines.length} purchase plan{machines.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+        </div>
+
+        {sortedMachines.map((machine, idx) => {
+          const expiresAt = new Date(machine.expiresAt).getTime();
+          const remainingSeconds = Math.max(0, Math.floor((expiresAt - now) / 1000));
+          const status = getMachineStatus(remainingSeconds);
+          const currentReward = getMachineUnclaimed(machine, machineType, now);
+
+          return (
+            <div key={machine.id ?? idx} style={{
+              background: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: '14px 16px', marginBottom: 10,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 700 }}>Plan #{sortedMachines.length - idx}</span>
+                <span style={{
+                  fontSize: 10, fontWeight: 800, letterSpacing: '0.03em', color: status.color,
+                  background: status.color === '#4ade80' ? 'rgba(74,222,128,0.12)' : status.color === '#facc15' ? 'rgba(250,204,21,0.12)' : 'rgba(255,255,255,0.06)',
+                  borderRadius: 20, padding: '3px 9px',
+                }}>
+                  {status.label.toUpperCase()}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Purchase time</span>
+                <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>{fmtDateTime(machine.purchasedAt)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Expiry time</span>
+                <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>{fmtDateTime(machine.expiresAt)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Current reward</span>
+                <span style={{ color: '#4ade80', fontSize: 12, fontWeight: 800 }}>{fmtNum(currentReward)} AXN</span>
+              </div>
+            </div>
+          );
+        })}
+
+        <button onClick={onClose} style={{ width: '100%', padding: '14px 0', marginTop: 4, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 800, cursor: 'pointer' }} className="active:scale-95 transition-transform">Close</button>
+      </div>
+    </div>
+  );
+}
+
 function FarmingCard({
   machineType,
   machines,
@@ -45,6 +145,7 @@ function FarmingCard({
   now: number;
 }) {
   const queryClient = useQueryClient();
+  const [showDetails, setShowDetails] = useState(false);
   const activeMachines = machines.filter(machine => new Date(machine.expiresAt).getTime() > now);
   const level = Math.min(machines.length, 10);
   const hourlyEarnings = level * machineType.hourlyAxn;
@@ -76,10 +177,15 @@ function FarmingCard({
   });
 
   return (
-    <div style={{
-      background: 'rgba(255,255,255,0.07)', borderRadius: 16, padding: '16px',
-      marginBottom: 12, opacity: activeMachines.length > 0 ? 1 : 0.58,
-    }}>
+    <>
+    <div
+      onClick={() => setShowDetails(true)}
+      style={{
+        background: 'rgba(255,255,255,0.07)', borderRadius: 16, padding: '16px',
+        marginBottom: 12, opacity: activeMachines.length > 0 ? 1 : 0.58, cursor: 'pointer',
+      }}
+      className="active:scale-[0.99] transition-transform"
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 }}>
         <div style={{ width: 54, height: 54, borderRadius: 14, overflow: 'hidden', flexShrink: 0, background: '#16181d' }}>
           <img
@@ -131,7 +237,7 @@ function FarmingCard({
       </div>
 
       <button
-        onClick={() => totalUnclaimed >= 1 && claimMutation.mutate()}
+        onClick={(e) => { e.stopPropagation(); totalUnclaimed >= 1 && claimMutation.mutate(); }}
         disabled={totalUnclaimed < 1 || claimMutation.isPending}
         style={{
           width: '100%', marginTop: 14,
@@ -147,6 +253,16 @@ function FarmingCard({
         {claimMutation.isPending ? 'CLAIMING…' : `CLAIM ${fmtNum(totalUnclaimed)} AXN`}
       </button>
     </div>
+
+    {showDetails && (
+      <NFTDetailsSheet
+        machineType={machineType}
+        machines={machines}
+        now={now}
+        onClose={() => setShowDetails(false)}
+      />
+    )}
+    </>
   );
 }
 
