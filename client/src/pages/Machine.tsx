@@ -21,7 +21,7 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
   const isMaxLevel = level >= 10;
 
   return (
-    <div style={{ width: 152, flexShrink: 0, scrollSnapAlign: "start" }}>
+    <div style={{ width: "100%", minWidth: 0 }}>
       {/* Artwork */}
       <button
         onClick={() => !isMaxLevel && onBuy(machine)}
@@ -287,11 +287,9 @@ export default function MachinePage() {
               {category.name}
             </div>
             <div
-              className="scrollbar-hide"
               style={{
-                display: "flex", gap: 12, overflowX: "auto", overflowY: "hidden",
-                WebkitOverflowScrolling: "touch", scrollSnapType: "x mandatory",
-                paddingBottom: 4,
+                display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 12, width: "100%",
               }}
             >
               {category.machines.map(m => (
