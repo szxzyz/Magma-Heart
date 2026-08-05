@@ -24,14 +24,15 @@ async function waitForSdk(ms = 8000): Promise<boolean> {
 
 export async function showRewardedInterstitial(): Promise<void> {
   const ready = await waitForSdk();
-  if (!ready) return;
+  if (!ready) throw new Error("Rewarded ad SDK not available");
   try {
     await (window.show_10963365 as any)();
   } catch (e) {
     console.warn("Rewarded interstitial ad error:", e);
     try {
       await (window.show_10963365 as any)();
-    } catch {
+    } catch (retryError) {
+      throw retryError instanceof Error ? retryError : new Error("Rewarded ad was not completed");
     }
   }
 }

@@ -57,7 +57,7 @@ async function fetchFromCoinGecko(): Promise<number> {
   return price;
 }
 
-export async function getTONPrice(): Promise<number> {
+export async function getGramPrice(): Promise<number> {
   const now = Date.now();
   if (cachedPrice && now - cachedPrice.lastUpdated < CACHE_DURATION) {
     return cachedPrice.price;
@@ -79,19 +79,19 @@ export async function getTONPrice(): Promise<number> {
   return 3.5;
 }
 
-export function axnToTon(axnRaw: number): number {
+export function axnToGram(axnRaw: number): number {
   return axnRaw / 100000;
 }
 
-export function tonToUsd(ton: number, tonPrice: number): number {
-  return ton * tonPrice;
+export function gramToUsd(gram: number, gramPrice: number): number {
+  return gram * gramPrice;
 }
 
-export function formatTon(ton: number): string {
-  if (ton === 0) return '0';
-  if (ton < 0.0001) return ton.toFixed(8).replace(/\.?0+$/, '');
-  if (ton < 1) return ton.toFixed(6).replace(/\.?0+$/, '');
-  return ton.toFixed(4).replace(/\.?0+$/, '');
+export function formatGram(gram: number): string {
+  if (gram === 0) return '0';
+  if (gram < 0.0001) return gram.toFixed(8).replace(/\.?0+$/, '');
+  if (gram < 1) return gram.toFixed(6).replace(/\.?0+$/, '');
+  return gram.toFixed(4).replace(/\.?0+$/, '');
 }
 
 export function formatUsd(usd: number): string {
