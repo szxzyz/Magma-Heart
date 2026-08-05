@@ -260,8 +260,9 @@ export default function MachinePage() {
 
         {/* ─── NFT MARKETPLACE ─── */}
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 20, fontWeight: 900, color: "#fff", letterSpacing: "-0.3px" }}>
-            NFT Marketplace
+          <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: "-0.3px" }}>
+            <span style={{ color: "#fff" }}>NFT </span>
+            <span style={{ color: "#3b82f6" }}>Marketplace</span>
           </div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 4, lineHeight: 1.5 }}>
             Buy NFTs using CIPHER. Manage farming progress and claim AXN on the Rewards page.

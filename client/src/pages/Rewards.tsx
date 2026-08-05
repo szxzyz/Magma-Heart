@@ -299,8 +299,9 @@ export default function Rewards() {
 
         {/* DAILY REWARDS */}
         <div style={{ marginBottom: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Daily Rewards
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            <span style={{ color: 'rgba(255,255,255,0.28)' }}>Daily </span>
+            <span style={{ color: '#3b82f6' }}>Rewards</span>
           </span>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>Complete daily tasks and get rewards.</div>
         </div>
