@@ -28,6 +28,10 @@ function fmtNum(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
+function fmtGram(n: number): string {
+  return (n / 100_000).toFixed(6);
+}
+
 function getMachineUnclaimed(machine: any, machineType: any, now: number): number {
   const lastClaimed = new Date(machine.lastClaimedAt || machine.purchasedAt).getTime();
   const expiresAt = new Date(machine.expiresAt).getTime();
@@ -228,45 +232,35 @@ function FarmingCard({
           <div style={{ color: '#fff', fontSize: 15, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {machineType.name}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 12, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hr
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 11, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             Level {level}/10
-            {machines.length > 1 && <span> · {machines.length} purchases</span>}
           </div>
         </div>
       </div>
 
-      {/* Earnings + progress + remaining time */}
+      {/* Daily earnings + progress + remaining time */}
       <div style={{ padding: '0 14px 14px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Hourly Earnings</div>
-            <div style={{ color: '#4ade80', fontSize: 13, fontWeight: 800 }}>{hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hour</div>
-          </div>
-          <div>
             <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Daily Earnings</div>
-            <div style={{ color: '#4ade80', fontSize: 13, fontWeight: 800 }}>{dailyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/day</div>
+            <div style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>{dailyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/day</div>
           </div>
-        </div>
-
-        <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-          <div style={{
-            height: '100%', width: `${progress * 100}%`, borderRadius: 4,
-            background: activeMachines.length > 0 ? 'linear-gradient(90deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.14)',
-          }} />
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Remaining time</div>
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Remaining Time</div>
             <div style={{ color: activeMachines.length > 0 ? '#fff' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
               {fmtCountdown(remainingSeconds)}
             </div>
           </div>
-          {claimOverdue && (
-            <div style={{ color: '#facc15', fontSize: 11, fontWeight: 700 }}>
-              ⏰ Claim overdue
-            </div>
-          )}
+        </div>
+
+        <div style={{ height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', width: `${progress * 100}%`, borderRadius: 4,
+            background: activeMachines.length > 0 ? 'linear-gradient(90deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.14)',
+          }} />
         </div>
       </div>
 
@@ -292,7 +286,7 @@ function FarmingCard({
           <button
             onClick={(e) => { e.stopPropagation(); totalUnclaimed >= 1 && claimMutation.mutate(); }}
             disabled={totalUnclaimed < 1}
-            style={{ flex: 3, padding: '11px 0', background: 'none', border: 'none', cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: totalUnclaimed >= 1 ? '#22c55e' : 'rgba(255,255,255,0.28)', fontSize: 12, fontWeight: 800, letterSpacing: '0.05em' }}
+            style={{ flex: 3, padding: '11px 0', background: 'none', border: 'none', cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: totalUnclaimed >= 1 ? '#fff' : 'rgba(255,255,255,0.28)', fontSize: 12, fontWeight: 800, letterSpacing: '0.05em' }}
             className="active:scale-95 transition-transform"
           >
             {totalUnclaimed >= 1 ? `CLAIM ${fmtNum(totalUnclaimed)} AXN` : 'CLAIM'}
@@ -304,7 +298,7 @@ function FarmingCard({
           style={{ flex: 1, padding: '11px 0', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           className="active:scale-95 transition-transform"
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={claimOverdue ? '#facc15' : 'rgba(255,255,255,0.38)'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.38)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
             <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
@@ -609,8 +603,8 @@ export default function Rewards() {
               Rewards are generated only by NFTs you own.
             </div>
           </div>
-          <div style={{ color: '#4ade80', fontSize: 12, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}>
-            {fmtNum(totalHourlyRate)} AXN/hr
+          <div style={{ color: '#fff', fontSize: 12, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap', textAlign: 'right' }}>
+            ({fmtGram(totalHourlyRate)} GRAM) {fmtNum(totalHourlyRate)} AXN/hr
           </div>
         </div>
 
