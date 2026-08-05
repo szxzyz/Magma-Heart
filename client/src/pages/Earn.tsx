@@ -28,9 +28,9 @@ function incrementSlotCount(slotId: number): number {
 
 type AdProvider = 'Monetag' | 'Adgram' | 'Gigapub';
 const AD_TASKS: { id: number; provider: AdProvider; desc: string; reward: number; dailyLimit: number }[] = [
-  { id: 1, provider: 'Monetag',  desc: 'Rewarded interstitial ads',   reward: 10, dailyLimit: 50 },
-  { id: 2, provider: 'Adgram',   desc: 'In-app telegram ads',         reward: 10, dailyLimit: 10 },
-  { id: 3, provider: 'Gigapub',  desc: 'Display & native ads',        reward: 10, dailyLimit: 30 },
+  { id: 1, provider: 'Monetag',  desc: '', reward: 10, dailyLimit: 50 },
+  { id: 2, provider: 'Adgram',   desc: '', reward: 10, dailyLimit: 10 },
+  { id: 3, provider: 'Gigapub',  desc: '', reward: 10, dailyLimit: 30 },
 ];
 async function runAdForProvider(provider: AdProvider): Promise<void> {
   if (provider === 'Monetag') await showMonatagRewardedAd();
@@ -100,7 +100,7 @@ function AdRow({ slotId, provider, desc, reward, dailyLimit, isLast }: {
             <span style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 5, color: BLUE, fontSize: 10, fontWeight: 800, padding: '2px 6px' }}>+{reward} CIPHER</span>
           </div>
           <div style={{ color: TEXT_DIM, fontSize: 12, marginTop: 2 }}>
-            {atLimit ? `${dailyLimit}/${dailyLimit} — come back tomorrow` : `${count}/${dailyLimit} today · ${desc}`}
+            {atLimit ? `${dailyLimit}/${dailyLimit} — come back tomorrow` : `${count}/${dailyLimit} today`}
           </div>
         </div>
         <button onClick={handleWatch} disabled={busy || atLimit} style={{
@@ -139,10 +139,10 @@ function AxnNameTaskDaily({ claimedToday }: { claimedToday: boolean }) {
       const data = await res.json();
       if (data.success) {
         setDone(true);
-        showNotification(data.message || '+10 CIPHER earned!', 'success');
+        showNotification(data.message || '+1000 CIPHER earned!', 'success');
         queryClient.setQueryData(['/api/auth/user'], (old: any) => {
           if (!old) return old;
-          return { ...old, balance: String(Math.floor(parseFloat(old.balance || '0') + 10)), axnNameClaimedToday: true };
+          return { ...old, balance: String(Math.floor(parseFloat(old.balance || '0') + 1000)), axnNameClaimedToday: true };
         });
         queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       } else {
@@ -166,9 +166,8 @@ function AxnNameTaskDaily({ claimedToday }: { claimedToday: boolean }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           <span style={{ color: TEXT, fontSize: 14, fontWeight: 800 }}>Add $AXN to your name</span>
-          <span style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 5, color: BLUE, fontSize: 10, fontWeight: 800, padding: '2px 6px' }}>+10 CIPHER</span>
+          <span style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 5, color: BLUE, fontSize: 10, fontWeight: 800, padding: '2px 6px' }}>+1000 CIPHER</span>
         </div>
-        <div style={{ color: TEXT_DIM, fontSize: 12, marginTop: 2 }}>Daily task · resets every day</div>
       </div>
       <div style={{ flexShrink: 0 }}>
         {state === 'checking' ? (
@@ -555,9 +554,16 @@ function _RemovedAddMissionPopup({ onClose, userBalance, isAdmin }: { onClose: (
 }
 
 function SectionLabel({ title, subtitle }: { title: string; subtitle?: string }) {
+  const firstSpace = title.indexOf(' ');
+  const firstWord = firstSpace === -1 ? title : title.slice(0, firstSpace);
+  const remainingWords = firstSpace === -1 ? '' : title.slice(firstSpace + 1);
+
   return (
     <div style={{ marginBottom: 8 }}>
-      <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{title}</span>
+      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        <span style={{ color: BLUE }}>{firstWord}</span>
+        {remainingWords && <span style={{ color: TEXT }}>{` ${remainingWords}`}</span>}
+      </span>
       {subtitle && <div style={{ fontSize: 11, color: TEXT_DIM, marginTop: 2 }}>{subtitle}</div>}
     </div>
   );

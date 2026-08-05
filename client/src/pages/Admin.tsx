@@ -1050,8 +1050,6 @@ function SettingsSection() {
     channelJoinRequired: true,
     withdraw_ads_required: false,
     minTradeAmount: "1000",
-    swapRate: "3",
-    swapMinCipher: "1000",
   });
 
   useEffect(() => {
@@ -1070,9 +1068,7 @@ function SettingsSection() {
         minimumInvitesForWithdrawal: settingsData.minimumInvitesForWithdrawal?.toString() || "3",
         channelJoinRequired: settingsData.channelJoinRequired !== false,
         withdraw_ads_required: Boolean(settingsData.withdraw_ads_required),
-        minTradeAmount: settingsData.minTradeAmount?.toString() || "1000",
-        swapRate: settingsData.swapRate?.toString() || "3",
-        swapMinCipher: settingsData.swapMinCipher?.toString() || "1000",
+         minTradeAmount: settingsData.minTradeAmount?.toString() || "1000",
       });
     }
   }, [settingsData]);
@@ -1094,9 +1090,7 @@ function SettingsSection() {
         minimumInvitesForWithdrawal: parseInt(s.minimumInvitesForWithdrawal),
         channelJoinRequired: Boolean(s.channelJoinRequired),
         withdraw_ads_required: Boolean(s.withdraw_ads_required),
-        minTradeAmount: parseInt(s.minTradeAmount),
-        swapRate: parseInt(s.swapRate),
-        swapMinCipher: parseInt(s.swapMinCipher),
+         minTradeAmount: parseInt(s.minTradeAmount),
       };
       const r = await apiRequest("PUT", "/api/admin/settings", payload);
       const d = await r.json();
@@ -1179,12 +1173,6 @@ function SettingsSection() {
         <SettCard title="Withdrawal Settings" icon={<DollarSign className="w-3.5 h-3.5" />} color="text-green-400">
           <SettField label="Minimum Trade Amount (AXN)" hint="Minimum AXN required to trade in the withdrawal popup">
             <Input type="number" value={s.minTradeAmount} onChange={e => setS({ ...s, minTradeAmount: e.target.value })} className="h-8 text-xs bg-[#0a0a0a] border-white/10" />
-          </SettField>
-          <SettField label="Swap Rate (CIPHER per AXN)" hint="How many CIPHER = 1 AXN (e.g. 3 means 3 CIPHER → 1 AXN)">
-            <Input type="number" min="1" value={s.swapRate} onChange={e => setS({ ...s, swapRate: e.target.value })} className="h-8 text-xs bg-[#0a0a0a] border-white/10" />
-          </SettField>
-          <SettField label="Minimum Swap (CIPHER)" hint="Minimum CIPHER a user must swap at once">
-            <Input type="number" min="1" value={s.swapMinCipher} onChange={e => setS({ ...s, swapMinCipher: e.target.value })} className="h-8 text-xs bg-[#0a0a0a] border-white/10" />
           </SettField>
           <SettField label="Minimum Withdrawal (AXN)" hint="Minimum AXN required to withdraw">
             <Input type="number" value={s.minimum_withdrawal_sat} onChange={e => setS({ ...s, minimum_withdrawal_sat: e.target.value })} className="h-8 text-xs bg-[#0a0a0a] border-white/10" />

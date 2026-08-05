@@ -16,10 +16,20 @@ type MysteryPhase = 'idle' | 'opening' | 'revealed' | 'claiming' | 'done';
 
 function fmtCountdown(secs: number): string {
   if (secs <= 0) return "Expired";
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const days = Math.floor(secs / 86_400);
+  const hours = Math.floor((secs % 86_400) / 3_600);
+  const minutes = Math.floor((secs % 3_600) / 60);
+  const unit = (value: number, singular: string) => `${value} ${singular}${singular === 'Min' || value === 1 ? '' : 's'}`;
+
+  if (days > 0) {
+    if (hours > 0) return `${unit(days, 'Day')} ${unit(hours, 'Hour')}`;
+    if (minutes > 0) return `${unit(days, 'Day')} ${unit(minutes, 'Min')}`;
+    return unit(days, 'Day');
+  }
+  if (hours > 0) {
+    return minutes > 0 ? `${unit(hours, 'Hour')} ${unit(minutes, 'Min')}` : unit(hours, 'Hour');
+  }
+  return unit(Math.max(1, minutes), 'Min');
 }
 
 function fmtNum(n: number): string {
@@ -233,10 +243,10 @@ function FarmingCard({
           </div>
         </div>
         <div style={{ flexShrink: 0, textAlign: 'right', paddingLeft: 8 }}>
-          <div style={{ color: '#fff', fontSize: 10, fontWeight: 700, marginBottom: 4, whiteSpace: 'nowrap' }}>
+           <div style={{ color: '#fff', fontSize: 10, fontWeight: 700, marginBottom: 4, whiteSpace: 'nowrap' }}>
             Remaining Time
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.42)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+           <div style={{ color: claimOverdue ? '#ef4444' : 'rgba(255,255,255,0.42)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
             {fmtCountdown(remainingSeconds)}
           </div>
         </div>
@@ -278,8 +288,16 @@ function FarmingCard({
           <button
             onClick={(e) => { e.stopPropagation(); totalUnclaimed >= 1 && claimMutation.mutate(); }}
             disabled={totalUnclaimed < 1}
-            style={{ flex: 3, padding: '11px 0', background: 'none', border: 'none', cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', opacity: totalUnclaimed >= 1 ? 1 : 0.42, fontSize: 12, fontWeight: 800, letterSpacing: '0.05em' }}
-            className="active:scale-95 transition-transform"
+             style={{
+               flex: 3, padding: '11px 0', border: 'none',
+               background: totalUnclaimed >= 1 ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : 'rgba(255,255,255,0.06)',
+               cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed',
+               display: 'flex', alignItems: 'center', justifyContent: 'center',
+               color: totalUnclaimed >= 1 ? '#fff' : 'rgba(255,255,255,0.3)',
+               fontSize: 12, fontWeight: 800, letterSpacing: '0.05em',
+               boxShadow: totalUnclaimed >= 1 ? '0 2px 12px rgba(37,99,235,0.35)' : 'none',
+             }}
+             className={totalUnclaimed >= 1 ? "active:scale-95 transition-transform" : ""}
           >
             {totalUnclaimed >= 1 ? `CLAIM ${fmtNum(totalUnclaimed)} AXN` : 'CLAIM'}
           </button>
@@ -401,9 +419,14 @@ export default function Rewards() {
   const handleDailyCheck = async () => {
     if (dailyChecked || dailyAdLoading || dailyCheckMutation.isPending) return;
     setDailyAdLoading(true);
-    try { await showRewardedInterstitial(); } catch {}
-    setDailyAdLoading(false);
-    dailyCheckMutation.mutate();
+    try {
+      await showRewardedInterstitial();
+      dailyCheckMutation.mutate();
+    } catch {
+      showNotification('Ad was not completed. Daily check-in reward was not granted.', 'error');
+    } finally {
+      setDailyAdLoading(false);
+    }
   };
 
   const handleMysteryOpen = async () => {
@@ -506,7 +529,7 @@ export default function Rewards() {
 
         {/* DAILY REWARDS */}
         <div style={{ marginBottom: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+             <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.3px' }}>
             <span style={{ color: 'rgba(255,255,255,0.28)' }}>Daily </span>
             <span style={{ color: '#3b82f6' }}>Rewards</span>
           </span>
@@ -587,7 +610,7 @@ export default function Rewards() {
         {/* MY NFTS label */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
           <div>
-            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+             <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.3px' }}>
               <span style={{ color: 'rgba(255,255,255,0.28)' }}>My </span>
               <span style={{ color: '#3b82f6' }}>NFTs</span>
             </span>

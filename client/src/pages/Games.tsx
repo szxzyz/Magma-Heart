@@ -7,17 +7,16 @@ import Header from "@/components/Header";
 import { useLocation } from "wouter";
 import WithdrawPopup from "@/components/WithdrawPopup";
 import { useAdmin } from "@/hooks/useAdmin";
-import { getTONPrice, axnToTon, tonToUsd, formatTon, formatUsd } from "@/lib/tonPriceService";
-const AXN_PER_TON = 100000;
+import { getGramPrice, axnToGram, gramToUsd, formatGram, formatUsd } from "@/lib/tonPriceService";
+const AXN_PER_GRAM = 100000;
 
 export default function Games() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [balanceHidden, setBalanceHidden] = useState(false);
-  const [tonPrice, setTonPrice] = useState<number>(3.5);
+  const [gramPrice, setGramPrice] = useState<number>(3.5);
   const [showStakingPopup, setShowStakingPopup] = useState(false);
   const [showWithdrawPopup, setShowWithdrawPopup] = useState(false);
   const [showPromoPopup, setShowPromoPopup] = useState(false);
-  const [showSwapPopup, setShowSwapPopup] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
   const queryClient = useQueryClient();
@@ -26,13 +25,11 @@ export default function Games() {
   const { isAdmin } = useAdmin();
   const { data: user } = useQuery<any>({ queryKey: ['/api/auth/user'], staleTime: 0 });
   const { data: botInfo } = useQuery<{ username: string }>({ queryKey: ['/api/bot-info'], staleTime: 3600000 });
-  const { data: swapSettings } = useQuery<{ swapRate: number; swapMinCipher: number }>({ queryKey: ['/api/swap-config'], staleTime: 60000 });
-
   const axnRaw = parseFloat(user?.walletBalance || '0');
   const axnBalance = Math.floor(axnRaw);
-  const tonValue = axnToTon(axnRaw);
-  const usdValue = tonToUsd(tonValue, tonPrice);
-  const tonDisplay = formatTon(tonValue);
+  const gramValue = axnToGram(axnRaw);
+  const usdValue = gramToUsd(gramValue, gramPrice);
+  const gramDisplay = formatGram(gramValue);
   const usdDisplay = formatUsd(usdValue);
   const axnDisplay = axnRaw === 0 ? '0' : axnRaw % 1 === 0
     ? axnRaw.toLocaleString()
@@ -51,8 +48,8 @@ export default function Games() {
   useEffect(() => {
     let cancelled = false;
     const fetch = async () => {
-      const price = await getTONPrice();
-      if (!cancelled) setTonPrice(price);
+       const price = await getGramPrice();
+       if (!cancelled) setGramPrice(price);
     };
     fetch();
     const interval = setInterval(fetch, 60000);
@@ -125,10 +122,10 @@ export default function Games() {
             </button>
           </div>
 
-          {/* TON and USD sub-values */}
+          {/* GRAM and USD sub-values */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 14 }}>
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.38)', fontWeight: 500 }}>
-              {balanceHidden ? '≈ •••• TON' : `≈ ${tonDisplay} TON`}
+              {balanceHidden ? '≈ •••• GRAM' : `≈ ${gramDisplay} GRAM`}
             </span>
             <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'inline-block' }} />
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.38)', fontWeight: 500 }}>
@@ -157,25 +154,6 @@ export default function Games() {
                 </svg>
               </button>
               <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.48)' }}>Withdraw</span>
-            </div>
-
-            {/* Swap */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}>
-              <button onClick={() => setShowSwapPopup(true)} style={{
-                width: 52, height: 52, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #1e40af, #3b82f6)',
-                border: 'none',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 4px 16px rgba(37,99,235,0.4)',
-              }} className="active:scale-90 transition-transform">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="17 1 21 5 17 9"/>
-                  <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-                  <polyline points="7 23 3 19 7 15"/>
-                  <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-                </svg>
-              </button>
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.48)' }}>Swap</span>
             </div>
 
             {/* Staking */}
@@ -225,16 +203,6 @@ export default function Games() {
         <PromoPopup
           onClose={() => setShowPromoPopup(false)}
           onSuccess={() => { queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] }); setShowPromoPopup(false); }}
-        />
-      )}
-
-      {showSwapPopup && (
-        <SwapPopup
-          onClose={() => setShowSwapPopup(false)}
-          cipherBalance={Math.floor(parseFloat(user?.balance || '0'))}
-          swapRate={swapSettings?.swapRate ?? 3}
-          swapMin={swapSettings?.swapMinCipher ?? 1000}
-          onSuccess={() => { queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] }); }}
         />
       )}
 
@@ -418,7 +386,7 @@ function _SendChoicePopupRemoved({ user, onClose, onWithdraw, onSuccess }: {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ color: '#fff', fontSize: 15, fontWeight: 800, marginBottom: 3 }}>Withdraw</div>
-                <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 12 }}>Send to external TON wallet</div>
+                <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 12 }}>Send to external GRAM wallet</div>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
             </button>
@@ -515,115 +483,6 @@ function _ReceivePopupRemoved({ user, onClose }: { user: any; onClose: () => voi
             </div>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function SwapPopup({ onClose, cipherBalance, swapRate, swapMin, onSuccess }: { onClose: () => void; cipherBalance: number; swapRate: number; swapMin: number; onSuccess: () => void }) {
-  const [amount, setAmount] = useState('');
-  const [loading, setLoading] = useState(false);
-  const queryClient = useQueryClient();
-
-  const RATE = swapRate;
-  const MIN_CIPHER = swapMin;
-  const parsed = parseInt(amount) || 0;
-  const rounded = Math.floor(parsed / RATE) * RATE;
-  const axnOut = rounded / RATE;
-  const canSwap = rounded >= MIN_CIPHER && rounded <= cipherBalance;
-  const maxAmount = Math.floor(cipherBalance / RATE) * RATE;
-
-  const handleSwap = async () => {
-    if (!canSwap || loading) return;
-    setLoading(true);
-    try {
-      const res = await apiRequest('POST', '/api/swap', { cipherAmount: rounded });
-      const data = await res.json();
-      if (data.success) {
-        showNotification(`✅ Swapped ${rounded} CIPHER → ${axnOut} AXN`, 'success');
-        queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-        onSuccess();
-        onClose();
-      } else {
-        showNotification(data.message || 'Swap failed', 'error');
-      }
-    } catch (e: any) {
-      let msg = 'Swap failed';
-      try { const p = JSON.parse(e.message); if (p.message) msg = p.message; } catch {}
-      showNotification(msg, 'error');
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'flex-end' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={onClose} />
-      <div style={{ position: 'relative', width: '100%', background: 'linear-gradient(160deg, #0d0d0f, #111118)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '28px 28px 0 0', padding: '28px 20px', paddingBottom: 'max(48px, calc(env(safe-area-inset-bottom, 0px) + 24px))', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, #2563eb, #3b82f6, #2563eb, transparent)' }} />
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '0 auto 24px' }} />
-
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
-          <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', background: '#000', flexShrink: 0 }}>
-            <img src="/axn-coin.jpg" alt="AXN" style={{ width: '110%', height: '110%', objectFit: 'cover' }} />
-          </div>
-          <div>
-            <div style={{ color: '#fff', fontSize: 17, fontWeight: 900 }}>Swap CIPHER → AXN</div>
-            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>{RATE.toLocaleString()} CIPHER = 1 AXN</div>
-          </div>
-        </div>
-
-        {/* Info rows */}
-        <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: '4px 0', marginBottom: 16 }}>
-          {[
-            { label: 'Your CIPHER', val: cipherBalance.toLocaleString() },
-            { label: 'Minimum', val: `${MIN_CIPHER.toLocaleString()} CIPHER` },
-            { label: 'You receive', val: axnOut > 0 ? `${axnOut.toLocaleString()} AXN` : '—' },
-          ].map((r, i, arr) => (
-            <div key={r.label}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13 }}>{r.label}</span>
-                <span style={{ color: i === 2 && axnOut > 0 ? '#4ade80' : '#fff', fontSize: 13, fontWeight: 700 }}>{r.val}</span>
-              </div>
-              {i < arr.length - 1 && <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '0 16px' }} />}
-            </div>
-          ))}
-        </div>
-
-        {/* Amount input row */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Amount</div>
-            <button onClick={() => setAmount(String(maxAmount))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: 11, fontWeight: 700, padding: 0 }}>MAX</button>
-          </div>
-          <div style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 14, display: 'flex', alignItems: 'center', padding: '0 16px' }}>
-            <input
-              type="number"
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              placeholder={`Min ${MIN_CIPHER.toLocaleString()}`}
-              style={{ flex: 1, padding: '14px 0', background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 16, fontWeight: 700 }}
-            />
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, fontWeight: 700 }}>CIPHER</span>
-          </div>
-        </div>
-
-        {/* Swap button */}
-        <button
-          onClick={handleSwap}
-          disabled={!canSwap || loading}
-          style={{
-            width: '100%', padding: '14px 0', border: 'none', borderRadius: 14,
-            background: canSwap && !loading ? 'linear-gradient(135deg, #1d4ed8, #3b82f6)' : 'rgba(255,255,255,0.06)',
-            color: canSwap && !loading ? '#fff' : 'rgba(255,255,255,0.25)',
-            fontSize: 14, fontWeight: 800, cursor: canSwap && !loading ? 'pointer' : 'not-allowed',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          }}
-          className={canSwap && !loading ? 'active:scale-95 transition-transform' : ''}
-        >
-          {loading && <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
-          {loading ? 'Swapping…' : canSwap ? `Swap ${rounded.toLocaleString()} CIPHER → ${axnOut.toLocaleString()} AXN` : 'Enter an amount'}
-        </button>
       </div>
     </div>
   );
