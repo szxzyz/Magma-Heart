@@ -203,54 +203,55 @@ function FarmingCard({
         marginBottom: 12, opacity: activeMachines.length > 0 ? 1 : 0.58,
       }}
     >
-      {/* Main row: icon + name/level */}
+      {/* Header: NFT identity on the left, remaining time on the right */}
       <div
         onClick={() => setShowDetails(true)}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 14px 18px', cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '16px 14px 18px', cursor: 'pointer' }}
         className="active:scale-[0.99] transition-transform"
       >
-        <div style={{ width: 50, height: 50, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#16181d' }}>
-          <img
-            src={machineType.imageUrl}
-            alt={machineType.name}
-            loading="lazy"
-            decoding="async"
-            style={{
-              width: '100%', height: '100%', objectFit: 'cover', display: 'block',
-              objectPosition: machineType.imagePosition ?? '50% 50%',
-              transform: `scale(${machineType.imageZoom ?? 1})`, transformOrigin: 'center center',
-            }}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          <div style={{ width: 50, height: 50, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#16181d' }}>
+            <img
+              src={machineType.imageUrl}
+              alt={machineType.name}
+              loading="lazy"
+              decoding="async"
+              style={{
+                width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                objectPosition: machineType.imagePosition ?? '50% 50%',
+                transform: `scale(${machineType.imageZoom ?? 1})`, transformOrigin: 'center center',
+              }}
+            />
+          </div>
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <div style={{ color: '#fff', fontSize: 15, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {machineType.name}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.42)', fontSize: 11, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Level {level}/10
+            </div>
+          </div>
         </div>
-        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <div style={{ color: '#fff', fontSize: 15, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {machineType.name}
+        <div style={{ flexShrink: 0, textAlign: 'right', paddingLeft: 8 }}>
+          <div style={{ color: '#fff', fontSize: 10, fontWeight: 700, marginBottom: 4, whiteSpace: 'nowrap' }}>
+            Remaining Time
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 11, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Level {level}/10
-          </div>
-          <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hr
+          <div style={{ color: 'rgba(255,255,255,0.42)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {fmtCountdown(remainingSeconds)}
           </div>
         </div>
       </div>
 
-      {/* Three-column earnings and remaining time */}
+      {/* Two-column earnings */}
       <div style={{ padding: '0 14px 18px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 4 }}>Hourly Earnings</div>
-            <div style={{ color: '#fff', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>{hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hr</div>
+            <div style={{ color: '#fff', fontSize: 10, fontWeight: 700, marginBottom: 4 }}>Hourly Earnings</div>
+            <div style={{ color: 'rgba(255,255,255,0.42)', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>{hourlyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/hr</div>
           </div>
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Daily Earnings</div>
-            <div style={{ color: '#fff', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>{dailyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/day</div>
-          </div>
-          <div>
-            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginBottom: 3 }}>Remaining Time</div>
-            <div style={{ color: activeMachines.length > 0 ? '#fff' : 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-              {fmtCountdown(remainingSeconds)}
-            </div>
+            <div style={{ color: '#fff', fontSize: 10, fontWeight: 700, marginBottom: 4 }}>Daily Earnings</div>
+            <div style={{ color: 'rgba(255,255,255,0.42)', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>{dailyEarnings.toLocaleString(undefined, { maximumFractionDigits: 2 })} AXN/day</div>
           </div>
         </div>
       </div>
@@ -269,7 +270,7 @@ function FarmingCard({
         </button>
         <div style={{ width: 1, background: 'rgba(255,255,255,0.05)' }} />
         {claimMutation.isPending ? (
-          <button disabled style={{ flex: 3, padding: '11px 0', background: 'none', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: 'rgba(255,255,255,0.28)', fontSize: 12, fontWeight: 700, cursor: 'default' }}>
+          <button disabled style={{ flex: 3, padding: '11px 0', background: 'none', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'default' }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.4)', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
             Claiming…
           </button>
@@ -277,7 +278,7 @@ function FarmingCard({
           <button
             onClick={(e) => { e.stopPropagation(); totalUnclaimed >= 1 && claimMutation.mutate(); }}
             disabled={totalUnclaimed < 1}
-            style={{ flex: 3, padding: '11px 0', background: 'none', border: 'none', cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: totalUnclaimed >= 1 ? '#fff' : 'rgba(255,255,255,0.28)', fontSize: 12, fontWeight: 800, letterSpacing: '0.05em' }}
+            style={{ flex: 3, padding: '11px 0', background: 'none', border: 'none', cursor: totalUnclaimed >= 1 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', opacity: totalUnclaimed >= 1 ? 1 : 0.42, fontSize: 12, fontWeight: 800, letterSpacing: '0.05em' }}
             className="active:scale-95 transition-transform"
           >
             {totalUnclaimed >= 1 ? `CLAIM ${fmtNum(totalUnclaimed)} AXN` : 'CLAIM'}
