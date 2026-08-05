@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { showNotification } from "@/components/AppNotification";
 import { apiRequest } from "@/lib/queryClient";
@@ -351,6 +352,7 @@ function FarmingCard({
 }
 
 export default function Rewards() {
+  const [, setLocation] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [dailyChecked, setDailyChecked] = useState(() => localStorage.getItem('daily_check_date') === getTodayKey());
   const [dailyAdLoading, setDailyAdLoading] = useState(false);
@@ -619,8 +621,21 @@ export default function Rewards() {
           }}>
             <div style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>You don't own any NFTs yet.</div>
             <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, lineHeight: 1.5, marginTop: 7 }}>
-              Purchase an NFT on the Machine page to start farming AXN.
+              Purchase an NFT on the Marketplace to start farming AXN.
             </div>
+            <button
+              onClick={() => setLocation('/machine')}
+              style={{
+                marginTop: 18, padding: '11px 22px',
+                background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                color: '#fff', border: 'none', borderRadius: 12,
+                fontSize: 13, fontWeight: 800, letterSpacing: '0.02em', cursor: 'pointer',
+                boxShadow: '0 2px 12px rgba(37,99,235,0.4)',
+              }}
+              className="active:scale-95 transition-transform"
+            >
+              Purchase NFT
+            </button>
           </div>
         ) : (
           <>
