@@ -17,7 +17,7 @@ export interface MachineType {
 export const MACHINE_TYPES: MachineType[] = [
   {
     id: 'starter',
-    name: 'Humans',
+    name: 'Human',
     imageUrl: '/nft/humans.webp',
     imageZoom: 1.25,
     imagePosition: '50% 50%',
