@@ -2,11 +2,9 @@ import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Users, Wifi, CalendarDays, Receipt, Zap, ChevronRight, ArrowLeft,
-  TrendingUp, Activity, RefreshCw, Star, FileText, Lock, Info, Shield,
-  Loader2,
+  Users, Zap, ChevronRight, ArrowLeft,
+  Activity, FileText, Lock, Info, Shield,
 } from "lucide-react";
-import { RiBarChartFill } from "react-icons/ri";
 import { FaBalanceScale, FaCrown } from "react-icons/fa";
 import { MdOutlineSupportAgent } from "react-icons/md";
 import { BsQuestionCircleFill } from "react-icons/bs";
@@ -20,7 +18,7 @@ interface MenuPopupProps {
   onOpenInvite?: () => void;
 }
 
-type Overlay = "stats" | "legal" | "terms" | "faq" | null;
+type Overlay = "legal" | "terms" | "faq" | null;
 
 const CUT_SM = 'polygon(8px 0%,calc(100% - 8px) 0%,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0% calc(100% - 8px),0% 8px)';
 const CUT_LG = 'polygon(14px 0%,calc(100% - 14px) 0%,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0% calc(100% - 14px),0% 14px)';
@@ -36,25 +34,12 @@ const CORNER_ACCENTS = [
   { bottom:'14px',right:'2px',  width:'1.5px',height:'30px'  },
 ] as React.CSSProperties[];
 
-function fmtNum(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
-  return n.toLocaleString();
-}
-function fmtAge(days: number): string {
-  if (days >= 30) return `${Math.floor(days / 30)}mo ${days % 30}d`;
-  return `${days}d`;
-}
-
 export default function MenuPopup({ onClose, onOpenInvite }: MenuPopupProps) {
   const { isAdmin } = useAdmin();
   const [, setLocation] = useLocation();
   const [overlay, setOverlay] = useState<Overlay>(null);
 
   const { data: user } = useQuery<any>({ queryKey: ["/api/auth/user"], retry: false, staleTime: 60000 });
-  const { data: projectStats } = useQuery<any>({
-    queryKey: ["/api/project/stats"], enabled: overlay === "stats", retry: false, staleTime: 30000,
-  });
 
   const firstName: string = user?.firstName || user?.username || "User";
   const profileImageUrl: string | null =
@@ -114,7 +99,6 @@ export default function MenuPopup({ onClose, onOpenInvite }: MenuPopupProps) {
             </div>
 
             <div className="py-2">
-              <MenuItem icon={<RiBarChartFill className="w-5 h-5 text-blue-400" />} label="Project Statistics" onClick={() => setOverlay("stats")} />
               <MenuItem icon={<BsQuestionCircleFill className="w-5 h-5 text-sky-400" />} label="FAQs" onClick={() => setOverlay("faq")} />
               <MenuItem icon={<MdOutlineSupportAgent className="w-5 h-5 text-pink-400" />} label="Support" onClick={() => {
                 const tg = (window as any).Telegram?.WebApp;
@@ -150,36 +134,6 @@ export default function MenuPopup({ onClose, onOpenInvite }: MenuPopupProps) {
               >
                 {/* Scrollable content */}
                 <div className="flex-1 overflow-y-auto min-h-0">
-
-                  {overlay === "stats" && (
-                    <div className="px-4 py-4 space-y-4">
-                      {!projectStats ? (
-                        <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 text-white/30 animate-spin" /></div>
-                      ) : (
-                        <>
-                          <StatSection label="Core">
-                            <div className="grid grid-cols-2 gap-2">
-                              <StatCard icon={<Users className="w-3.5 h-3.5 text-blue-400" />} label="Total Users" value={fmtNum(projectStats.totalUsers)} />
-                              <StatCard icon={<Wifi className="w-3.5 h-3.5 text-green-400" />} label="Online Now" value={fmtNum(projectStats.onlineNow)} live />
-                              <StatCard icon={<CalendarDays className="w-3.5 h-3.5 text-purple-400" />} label="Project Age" value={fmtAge(projectStats.projectAgeDays)} />
-                              <StatCard icon={<TrendingUp className="w-3.5 h-3.5 text-yellow-400" />} label="Total Earned" value={`${fmtNum(projectStats.totalEarnings)} AXN`} axnIcon />
-                              <StatCard icon={<Receipt className="w-3.5 h-3.5 text-cyan-400" />} label="Withdrawn" value={`${fmtNum(projectStats.totalWithdrawalsAmount)} AXN`} wide axnIcon />
-                            </div>
-                          </StatSection>
-                          <StatSection label="Activity">
-                            <div className="grid grid-cols-2 gap-2">
-                              <StatCard icon={<Zap className="w-3.5 h-3.5 text-orange-400" />} label="Today Earned" value={`${fmtNum(projectStats.todayEarnings)} AXN`} wide axnIcon />
-                              <StatCard icon={<Activity className="w-3.5 h-3.5 text-blue-300" />} label="Daily Active" value={fmtNum(projectStats.dau)} />
-                              <StatCard icon={<Activity className="w-3.5 h-3.5 text-indigo-400" />} label="Weekly Active" value={fmtNum(projectStats.wau)} />
-                              <StatCard icon={<Users className="w-3.5 h-3.5 text-teal-400" />} label="Referrals" value={fmtNum(projectStats.totalReferrals)} />
-                              <StatCard icon={<RefreshCw className="w-3.5 h-3.5 text-green-400" />} label="Uptime" value={`${projectStats.uptimePct}%`} />
-                              <StatCard icon={<Star className="w-3.5 h-3.5 text-yellow-400" />} label="Retention" value={`${projectStats.retentionRate}%`} />
-                            </div>
-                          </StatSection>
-                        </>
-                      )}
-                    </div>
-                  )}
 
                   {overlay === "legal" && (
                     <div className="px-4 py-4 space-y-2.5">
@@ -285,31 +239,6 @@ function MenuItem({ icon, label, onClick, right }: { icon: React.ReactNode; labe
           <ChevronRight className="w-4 h-4 text-white/20" />
         </div>
       </button>
-    </div>
-  );
-}
-
-function StatSection({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-white/25 text-[10px] font-black uppercase tracking-widest mb-2">{label}</p>
-      {children}
-    </div>
-  );
-}
-
-function StatCard({ icon, label, value, live, wide, axnIcon }: { icon: React.ReactNode; label: string; value: string; live?: boolean; wide?: boolean; axnIcon?: boolean }) {
-  return (
-    <div className={`bg-white/[0.06] border border-white/5 rounded-2xl p-3 ${wide ? "col-span-2" : ""}`}>
-      <div className="flex items-center gap-1.5 mb-1.5">
-        {icon}
-        {live && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />}
-      </div>
-      <div className="flex items-center gap-1">
-        {axnIcon && <AXNIcon size={12} />}
-        <p className="text-white font-black text-sm tabular-nums">{value}</p>
-      </div>
-      <p className="text-white/30 text-[9px] uppercase tracking-wide mt-1">{label}</p>
     </div>
   );
 }
