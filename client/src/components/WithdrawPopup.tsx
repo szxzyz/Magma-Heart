@@ -4,6 +4,7 @@ import { Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { useTonConnectUI, useTonAddress, TonConnectButton } from "@tonconnect/ui-react";
 import { showNotification } from "@/components/AppNotification";
 import { apiRequest } from "@/lib/queryClient";
+import { CUT_LG, CORNER_ACCENTS_LG, cornerAccentStyle, outerBorderStyle, centeredOverlayStyle, backdropStyle } from "@/lib/cutCorner";
 
 const TREASURY = 'UQDeroBz4zvOntJ4xuMdiwFtNddMhJ4cGxghF9B7fYz50q8b';
 const MIN_AXN = 1000;
@@ -109,33 +110,24 @@ export default function WithdrawPopup({ onClose, userBalance }: Props) {
   const canSubmit    = !!connectedAddress && amtNum >= MIN_AXN && amtNum <= userBalance && !isProcessing;
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 900, display: 'flex', alignItems: 'flex-end' }}
-      onClick={onClose}
-    >
+    <div style={centeredOverlayStyle()} onClick={onClose}>
       <style>{`
         @keyframes wd-spin { to { transform: rotate(360deg); } }
       `}</style>
 
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} />
+      <div style={backdropStyle()} />
 
+      <div style={outerBorderStyle(420)}>
       <div
         style={{
           position: 'relative', width: '100%',
-          background: '#0a0a0a',
-          borderRadius: '20px 20px 0 0',
-          border: '1px solid rgba(255,255,255,0.06)',
-          borderBottom: 'none',
-          padding: '0 16px max(32px, calc(env(safe-area-inset-bottom,0px) + 16px))',
-          zIndex: 901, maxHeight: '88vh', overflowY: 'auto',
+          background: '#0a0a0a', clipPath: CUT_LG,
+          padding: '20px 16px max(20px, calc(env(safe-area-inset-bottom,0px) + 12px))',
+          maxHeight: '86vh', overflowY: 'auto',
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Top accent line */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, #2563eb, #3b82f6, #2563eb, transparent)', borderRadius: '20px 20px 0 0' }} />
-
-        {/* Drag handle */}
-        <div style={{ width: 32, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '12px auto 20px' }} />
+        {CORNER_ACCENTS_LG.map((s, i) => (<div key={i} style={{ ...cornerAccentStyle, ...s }} />))}
 
         {/* Title */}
         <div style={{ color: '#fff', fontSize: 18, fontWeight: 800, marginBottom: 20 }}>Withdraw AXN</div>
@@ -253,6 +245,7 @@ export default function WithdrawPopup({ onClose, userBalance }: Props) {
             </button>
           </>
         )}
+      </div>
       </div>
     </div>
   );
