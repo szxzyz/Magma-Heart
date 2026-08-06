@@ -68,7 +68,7 @@ export default function Games() {
     setIsSharing(true);
     try {
       const tg = (window as any).Telegram?.WebApp;
-      const url = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join Axionet! I earn 150 AXN for every friend who completes 10 tasks. Start earning now!')}`;
+      const url = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('Join Axionet and earn automatic referral rewards!')}`;
       if (tg?.openTelegramLink) tg.openTelegramLink(url);
       else window.open(url, '_blank');
     } catch {}

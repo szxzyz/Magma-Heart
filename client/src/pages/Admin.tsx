@@ -1040,9 +1040,6 @@ function SettingsSection() {
     ad_section1_limit: "250",
     ad_section2_reward: "0.0001",
     ad_section2_limit: "250",
-    affiliateCommission: "10",
-    referralBoostPerInvite: "0.02",
-    referralRewardEnabled: false,
     minimum_withdrawal_sat: "100",
     withdrawal_fee_sat: "0",
     withdrawalInviteRequirementEnabled: true,
@@ -1059,9 +1056,6 @@ function SettingsSection() {
         ad_section1_limit: settingsData.ad_section1_limit?.toString() || "250",
         ad_section2_reward: settingsData.ad_section2_reward?.toString() || "0.0001",
         ad_section2_limit: settingsData.ad_section2_limit?.toString() || "250",
-        affiliateCommission: settingsData.affiliateCommission?.toString() || "10",
-        referralBoostPerInvite: settingsData.referralBoostPerInvite?.toString() || "0.02",
-        referralRewardEnabled: settingsData.referralRewardEnabled || false,
         minimum_withdrawal_sat: settingsData.minWithdrawalAmountTON?.toString() || "100",
         withdrawal_fee_sat: settingsData.withdrawalFeeTON?.toString() || "0",
         withdrawalInviteRequirementEnabled: settingsData.withdrawalInviteRequirementEnabled !== false,
@@ -1081,9 +1075,6 @@ function SettingsSection() {
         ad_section1_limit: parseInt(s.ad_section1_limit),
         ad_section2_reward: s.ad_section2_reward,
         ad_section2_limit: parseInt(s.ad_section2_limit),
-        affiliateCommission: parseFloat(s.affiliateCommission),
-        referralBoostPerInvite: parseFloat(s.referralBoostPerInvite),
-        referralRewardEnabled: Boolean(s.referralRewardEnabled),
         minimum_withdrawal_sat: parseFloat(s.minimum_withdrawal_sat),
         withdrawal_fee_sat: parseFloat(s.withdrawal_fee_sat),
         withdrawalInviteRequirementEnabled: Boolean(s.withdrawalInviteRequirementEnabled),
@@ -1144,27 +1135,17 @@ function SettingsSection() {
       {cat === "mining" && (
         <SettCard title="Mining Boost" icon={<Pickaxe className="w-3.5 h-3.5" />} color="text-orange-400">
           <p className="text-[11px] text-gray-500 leading-relaxed">
-            Mining boost is earned by watching ads. Configure ad section rewards and limits in the <strong className="text-gray-300">Ads</strong> tab. Referral mining boost is in the <strong className="text-gray-300">Affiliates</strong> tab.
+            Mining boost is earned by watching ads. Configure ad section rewards and limits in the <strong className="text-gray-300">Ads</strong> tab.
           </p>
         </SettCard>
       )}
 
       {/* Affiliates */}
       {cat === "affiliates" && (
-        <SettCard title="Referral & Affiliates" icon={<GitBranch className="w-3.5 h-3.5" />} color="text-teal-400">
-          <SettField label="Referral Mining Boost (AXN/h per invite)" hint="Extra AXN/hour added to inviter's mining rate per active referral. e.g. 0.02 = +0.02 AXN/h per friend">
-            <Input type="number" step="0.001" value={s.referralBoostPerInvite} onChange={e => setS({ ...s, referralBoostPerInvite: e.target.value })} className="h-8 text-xs bg-[#0a0a0a] border-white/10" />
-          </SettField>
-          <SettField label="Affiliate Commission (%)" hint="Commission for affiliates">
-            <Input type="number" value={s.affiliateCommission} onChange={e => setS({ ...s, affiliateCommission: e.target.value })} className="h-8 text-xs bg-[#0a0a0a] border-white/10" />
-          </SettField>
-          <div className="flex items-center justify-between py-1">
-            <div>
-              <p className="text-xs text-white font-medium">Referral Bonus Enabled</p>
-              <p className="text-[10px] text-gray-500">Give one-time bonus on referral activation</p>
-            </div>
-            <MiniToggle value={Boolean(s.referralRewardEnabled)} onChange={v => setS({ ...s, referralRewardEnabled: v })} />
-          </div>
+        <SettCard title="Referral Rewards" icon={<GitBranch className="w-3.5 h-3.5" />} color="text-teal-400">
+          <p className="text-[11px] text-gray-400 leading-relaxed">
+            Referral rewards are fixed and distributed automatically. The inviter receives <strong className="text-white">1,000 CIPHER</strong> when the referred friend collects <strong className="text-white">100 AXN</strong>, plus a <strong className="text-white">5% deposit commission</strong> calculated from the referred friend’s TON deposit converted to CIPHER.
+          </p>
         </SettCard>
       )}
 

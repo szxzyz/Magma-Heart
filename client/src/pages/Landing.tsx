@@ -215,9 +215,9 @@ const features = [
   {
     Icon: IconReferral,
     title: "Referral Rewards",
-    desc: "Earn 10% cashback in TON from referral withdrawals plus 50 AXN every time a referral upgrades their machine.",
+    desc: "Earn 1,000 CIPHER when a referred friend collects 100 AXN, plus a 5% commission on their deposits.",
     color: "#8b5cf6",
-    bullets: ["10% cashback in TON", "50 AXN per upgrade referral", "Unlimited referral depth"],
+    bullets: ["1,000 CIPHER per milestone", "5% deposit commission", "Automatic distribution"],
   },
   {
     Icon: IconTrade,
@@ -502,8 +502,8 @@ export default function Landing() {
               {[
                 { label: "Daily AXN Mining", val: "Activity-based rewards", color: "#3b82f6" },
                 { label: "Internal AXN to TON Trading", val: "Live during mining phase", color: "#06b6d4" },
-                { label: "Referral Cashback", val: "10% in TON per referral", color: "#8b5cf6" },
-                { label: "Machine Upgrade Bonus", val: "50 AXN per upgrade", color: "#10b981" },
+                { label: "Referral Milestone", val: "1,000 CIPHER at 100 AXN", color: "#8b5cf6" },
+                { label: "Deposit Commission", val: "5% automatically credited", color: "#10b981" },
                 { label: "Blockchain Withdrawals", val: "TON live, AXN August 2026", color: "#f59e0b" },
                 { label: "Snapshot Airdrop", val: "Free AXN for active users", color: "#ef4444" },
               ].map((row, i) => (
