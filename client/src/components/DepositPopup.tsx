@@ -126,88 +126,92 @@ export default function DepositPopup({ onClose }: Props) {
           ×
         </button>
 
-        {!connectedAddress ? (
-          <div style={{ minHeight: 190, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-            <div style={{ color: "#fff", fontSize: 17, fontWeight: 900, textAlign: "center", marginBottom: 16 }}>Connect your wallet first</div>
+        <div style={{ color: "#fff", fontSize: 18, fontWeight: 900, letterSpacing: "0.02em" }}>BUY CIPHER</div>
+        <div style={{ color: "#60a5fa", fontSize: 12, fontWeight: 700, marginTop: 5 }}>1 GRAM = 100,000 CIPHER</div>
+
+        <div
+          style={{
+            marginTop: 15, display: "flex", alignItems: "center", gap: 9,
+            background: connectedAddress ? "rgba(37,99,235,0.16)" : "rgba(255,255,255,0.055)",
+            borderRadius: 14, padding: 12,
+          }}
+        >
+          <WalletCards size={17} color={connectedAddress ? "#60a5fa" : "rgba(255,255,255,0.55)"} />
+          {connectedAddress ? (
+            <>
+              <span style={{ flex: 1, color: "#dbeafe", fontFamily: "monospace", fontSize: 11 }}>
+                {connectedAddress.slice(0, 8)}…{connectedAddress.slice(-6)}
+              </span>
+              <span style={{ color: "#60a5fa", fontSize: 10, fontWeight: 800 }}>Connected</span>
+              <button onClick={() => tonConnectUI.disconnect()} style={{ border: "none", background: "none", color: "rgba(255,255,255,0.42)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                Disconnect
+              </button>
+            </>
+          ) : (
             <button
               onClick={() => tonConnectUI.openModal()}
-              style={{ width: "100%", border: "none", borderRadius: 11, padding: "12px", background: "#2563eb", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}
+              style={{ flex: 1, border: "none", borderRadius: 9, padding: "9px 11px", background: "#2563eb", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer", textAlign: "left" }}
             >
               Connect GRAM Wallet
             </button>
-          </div>
-        ) : (
-          <>
-            <div style={{ color: "#fff", fontSize: 18, fontWeight: 900, letterSpacing: "0.02em" }}>BUY CIPHER</div>
-            <div style={{ color: "#60a5fa", fontSize: 12, fontWeight: 700, marginTop: 5 }}>1 GRAM = 100,000 CIPHER</div>
+          )}
+        </div>
 
-            <div style={{ marginTop: 15, display: "flex", alignItems: "center", gap: 9, background: "rgba(255,255,255,0.055)", borderRadius: 14, padding: 12 }}>
-              <WalletCards size={17} color="#4ade80" />
-              <span style={{ flex: 1, color: "#d1fae5", fontFamily: "monospace", fontSize: 11 }}>
-                {connectedAddress.slice(0, 8)}…{connectedAddress.slice(-6)}
-              </span>
-              <button onClick={() => tonConnectUI.disconnect()} style={{ border: "none", background: "none", color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                Disconnect
-              </button>
-            </div>
-
-            <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 14 }}>
               <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: 700, marginBottom: 7 }}>Amount of CIPHER</div>
               <input
                 value={amount}
                 onChange={event => { setAmount(event.target.value.replace(/\D/g, "")); setStatus("idle"); setMessage(""); }}
-                disabled={busy || status === "success"}
+                disabled={!connectedAddress || busy || status === "success"}
                 inputMode="numeric"
                 placeholder="Enter CIPHER amount"
-                style={{ width: "100%", boxSizing: "border-box", border: "none", outline: "none", borderRadius: 12, padding: "13px 14px", background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 13 }}
+                style={{ width: "100%", boxSizing: "border-box", border: "none", outline: "none", borderRadius: 12, padding: "13px 14px", background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 13, opacity: connectedAddress ? 1 : 0.48 }}
               />
               <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 10, marginTop: 7 }}>Required payment: {grams} GRAM</div>
-            </div>
+        </div>
 
-            <div style={{ marginTop: 14, padding: "11px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 12 }}>
-              <div style={{ color: "rgba(255,255,255,0.42)", fontSize: 10, marginBottom: 5 }}>Send GRAM to:</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ flex: 1, color: "#fff", fontFamily: "monospace", fontSize: 10, wordBreak: "break-all" }}>{TREASURY}</span>
-                <button onClick={copyTreasury} aria-label="Copy admin wallet address" style={{ flexShrink: 0, border: "none", background: "rgba(255,255,255,0.08)", color: copied ? "#4ade80" : "#93c5fd", borderRadius: 8, padding: 8, cursor: "pointer" }}>
-                  <Clipboard size={14} />
-                </button>
-              </div>
-            </div>
-
-            {status === "sending" || status === "verifying" || status === "manualVerifying" ? (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#93c5fd", fontSize: 12, fontWeight: 700, marginTop: 14 }}>
-                <Loader2 size={15} style={{ animation: "deposit-spin 1s linear infinite" }} />
-                {status === "sending" ? "Opening wallet…" : status === "manualVerifying" ? "Watching for your manual transfer…" : "Verifying payment on blockchain…"}
-              </div>
-            ) : status === "success" ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, color: "#4ade80", fontSize: 12, fontWeight: 700 }}>
-                <CheckCircle2 size={17} /> {message}
-              </div>
-            ) : status === "error" ? (
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 14, color: "#f87171", fontSize: 12, lineHeight: 1.4 }}>
-                <XCircle size={17} style={{ flexShrink: 0 }} /> {message}
-              </div>
-            ) : null}
-
-            <button
-              onClick={buyCipher}
-              disabled={!amount || busy || status === "success"}
-              style={{ width: "100%", marginTop: 16, border: "none", borderRadius: 12, padding: "12px 0", background: amount && !busy && status !== "success" ? "linear-gradient(135deg,#2563eb,#3b82f6)" : "rgba(255,255,255,0.07)", color: amount && !busy && status !== "success" ? "#fff" : "rgba(255,255,255,0.25)", fontSize: 13, fontWeight: 800, cursor: amount && !busy ? "pointer" : "not-allowed" }}
-            >
-              {status === "success" ? "Balance Updated" : "Buy CIPHER"}
+        <div style={{ marginTop: 14, padding: "11px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 12, opacity: connectedAddress ? 1 : 0.55 }}>
+          <div style={{ color: "rgba(255,255,255,0.42)", fontSize: 10, marginBottom: 5 }}>Send GRAM to:</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ flex: 1, color: "#fff", fontFamily: "monospace", fontSize: 10, wordBreak: "break-all" }}>{TREASURY}</span>
+            <button onClick={copyTreasury} aria-label="Copy admin wallet address" style={{ flexShrink: 0, border: "none", background: "rgba(255,255,255,0.08)", color: copied ? "#4ade80" : "#93c5fd", borderRadius: 8, padding: 8, cursor: "pointer" }}>
+              <Clipboard size={14} />
             </button>
-            <button
-              onClick={startManualTransfer}
-              disabled={!amount || busy || status === "success"}
-              style={{ width: "100%", marginTop: 9, border: "none", borderRadius: 12, padding: "10px 0", background: "rgba(255,255,255,0.07)", color: amount && !busy && status !== "success" ? "#dbeafe" : "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: 800, cursor: amount && !busy ? "pointer" : "not-allowed" }}
-            >
-              I Sent GRAM Manually
-            </button>
-            <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, textAlign: "center", lineHeight: 1.4, marginTop: 9 }}>
-              Manual transfers are credited only when the sender and exact amount match this connected wallet.
-            </div>
-          </>
-        )}
+          </div>
+        </div>
+
+        {status === "sending" || status === "verifying" || status === "manualVerifying" ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#93c5fd", fontSize: 12, fontWeight: 700, marginTop: 14 }}>
+            <Loader2 size={15} style={{ animation: "deposit-spin 1s linear infinite" }} />
+            {status === "sending" ? "Opening wallet…" : status === "manualVerifying" ? "Watching for your manual transfer…" : "Verifying payment on blockchain…"}
+          </div>
+        ) : status === "success" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, color: "#4ade80", fontSize: 12, fontWeight: 700 }}>
+            <CheckCircle2 size={17} /> {message}
+          </div>
+        ) : status === "error" ? (
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 14, color: "#f87171", fontSize: 12, lineHeight: 1.4 }}>
+            <XCircle size={17} style={{ flexShrink: 0 }} /> {message}
+          </div>
+        ) : null}
+
+        <button
+          onClick={buyCipher}
+          disabled={!connectedAddress || !amount || busy || status === "success"}
+          style={{ width: "100%", marginTop: 16, border: "none", borderRadius: 12, padding: "12px 0", background: connectedAddress && amount && !busy && status !== "success" ? "linear-gradient(135deg,#2563eb,#3b82f6)" : "rgba(255,255,255,0.07)", color: connectedAddress && amount && !busy && status !== "success" ? "#fff" : "rgba(255,255,255,0.25)", fontSize: 13, fontWeight: 800, cursor: connectedAddress && amount && !busy ? "pointer" : "not-allowed" }}
+        >
+          {status === "success" ? "Balance Updated" : "Buy CIPHER"}
+        </button>
+        <button
+          onClick={startManualTransfer}
+          disabled={!connectedAddress || !amount || busy || status === "success"}
+          style={{ width: "100%", marginTop: 9, border: "none", borderRadius: 12, padding: "10px 0", background: "rgba(255,255,255,0.07)", color: connectedAddress && amount && !busy && status !== "success" ? "#dbeafe" : "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: 800, cursor: connectedAddress && amount && !busy ? "pointer" : "not-allowed" }}
+        >
+          I Sent GRAM Manually
+        </button>
+        <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, textAlign: "center", lineHeight: 1.4, marginTop: 9 }}>
+          Manual transfers are credited only when the sender and exact amount match this connected wallet.
+        </div>
         <style>{`@keyframes deposit-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
