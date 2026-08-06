@@ -190,6 +190,8 @@ export const referrals = pgTable("referrals", {
   usd_reward_amount: decimal("usd_reward_amount", { precision: 30, scale: 10 }).default("0"),
   tonRewardAmount: decimal("ton_reward_amount", { precision: 30, scale: 10 }).default("0"),
   bugRewardAmount: decimal("bug_reward_amount", { precision: 30, scale: 10 }).default("0"),
+  referralRewardGranted: boolean("referral_reward_granted").default(false),
+  depositCommissionEarned: decimal("deposit_commission_earned", { precision: 30, scale: 10 }).default("0"),
   status: varchar("status").default('pending'),
   createdAt: timestamp("created_at").defaultNow(),
 });
