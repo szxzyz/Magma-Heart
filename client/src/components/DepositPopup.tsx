@@ -122,7 +122,13 @@ export default function DepositPopup({ onClose }: Props) {
       onClick={onClose}
       style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}
     >
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.78)", backdropFilter: "blur(8px)" }} />
+      <div
+        onClick={onClose}
+        style={{
+          position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)",
+          backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
+        }}
+      />
       <div
         style={{
           clipPath: CUT_LG, padding: "1.5px", background: "rgba(255,255,255,0.08)",
