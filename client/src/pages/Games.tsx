@@ -8,6 +8,8 @@ import { useLocation } from "wouter";
 import WithdrawPopup from "@/components/WithdrawPopup";
 import { useAdmin } from "@/hooks/useAdmin";
 import { getGramPrice, axnToGram, gramToUsd, formatGram, formatUsd } from "@/lib/tonPriceService";
+import { ArrowUpRight, History, Loader2, Receipt } from "lucide-react";
+import { AXNIcon } from "@/components/AXNIcon";
 const AXN_PER_GRAM = 100000;
 
 export default function Games() {
@@ -25,6 +27,10 @@ export default function Games() {
   const { isAdmin } = useAdmin();
   const { data: user } = useQuery<any>({ queryKey: ['/api/auth/user'], staleTime: 0 });
   const { data: botInfo } = useQuery<{ username: string }>({ queryKey: ['/api/bot-info'], staleTime: 3600000 });
+  const { data: transactionData, isLoading: transactionsLoading } = useQuery<{
+    transactions?: any[];
+    withdrawals?: any[];
+  }>({ queryKey: ['/api/transactions'], staleTime: 15000 });
   const axnRaw = parseFloat(user?.walletBalance || '0');
   const axnBalance = Math.floor(axnRaw);
   const gramValue = axnToGram(axnRaw);
@@ -44,6 +50,24 @@ export default function Games() {
 
   const botUsername = botInfo?.username || 'bot';
   const referralLink = user?.referralCode ? `https://t.me/${botUsername}?start=${user.referralCode}` : '';
+  const transactionHistory = [
+    ...(transactionData?.transactions || []).map((transaction: any) => ({
+      id: `transaction-${transaction.id}`,
+      amount: transaction.amount,
+      label: transaction.description || transaction.source || transaction.type || 'Balance update',
+      status: transaction.type || 'completed',
+      createdAt: transaction.createdAt,
+      kind: 'transaction' as const,
+    })),
+    ...(transactionData?.withdrawals || []).map((withdrawal: any) => ({
+      id: `withdrawal-${withdrawal.id}`,
+      amount: withdrawal.amount,
+      label: 'Withdrawal',
+      status: withdrawal.status || 'pending',
+      createdAt: withdrawal.createdAt,
+      kind: 'withdrawal' as const,
+    })),
+  ].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +219,52 @@ export default function Games() {
 
       {/* Scrollable Content */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '8px clamp(12px, 4vw, 20px)', paddingBottom: 'max(90px, calc(env(safe-area-inset-bottom, 0px) + 90px))', width: '100%' }}>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <Receipt size={18} color="rgba(255,255,255,0.7)" strokeWidth={1.8} />
+            <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.3px' }}>
+              <span style={{ color: 'rgba(255,255,255,0.28)' }}>Transaction </span>
+              <span style={{ color: '#3b82f6' }}>History</span>
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>Your balance activity and withdrawals.</div>
+        </div>
 
+        <div style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
+          {transactionsLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 28 }}>
+              <Loader2 size={22} color="rgba(255,255,255,0.45)" className="animate-spin" />
+            </div>
+          ) : transactionHistory.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '30px 18px', color: 'rgba(255,255,255,0.25)' }}>
+              <History size={26} strokeWidth={1.7} />
+              <span style={{ fontSize: 12, fontWeight: 700 }}>No transactions yet</span>
+            </div>
+          ) : (
+            transactionHistory.map((entry, index) => {
+              const isWithdrawal = entry.kind === 'withdrawal';
+              const status = String(entry.status || '').replace(/_/g, ' ');
+              return (
+                <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 16px', borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)' }}>
+                  {isWithdrawal
+                    ? <ArrowUpRight size={24} color="rgba(255,255,255,0.7)" strokeWidth={1.8} style={{ flexShrink: 0 }} />
+                    : <AXNIcon size={24} />
+                  }
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: '#fff', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</div>
+                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 3 }}>
+                      {entry.createdAt ? new Date(entry.createdAt).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ color: isWithdrawal ? '#fff' : '#3b82f6', fontSize: 13, fontWeight: 900 }}>{isWithdrawal ? '-' : '+'}{Number(entry.amount || 0).toLocaleString()} AXN</div>
+                    <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 3, textTransform: 'capitalize' }}>{status}</div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Promo Popup */}

@@ -26,6 +26,7 @@ type ProviderStatus = {
   resetMs: number;
 };
 type ProviderStatusMap = Partial<Record<ProviderKey, ProviderStatus>>;
+type EarnTab = 'ads' | 'social' | 'partner' | 'bot';
 
 const AD_TASKS: { slotId: number; provider: AdProvider; statusKey: ProviderKey; reward: number; dailyLimit: number }[] = [
   { slotId: 2, provider: 'AdsGram', statusKey: 'AdsGram', reward: 700, dailyLimit: 10 },
@@ -742,6 +743,7 @@ function EmptyTaskState({ label }: { label: string }) {
 
 export default function Earn() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<EarnTab>('ads');
   const [, setLocation] = useLocation();
 
   const { data: user } = useQuery<any>({ queryKey: ['/api/auth/user'], staleTime: 0 });
@@ -760,34 +762,12 @@ export default function Earn() {
   const botTasks = (userTasks as any[]).filter((t: any) => t.category === 'website_bot' && !t.completed_by_me);
   const socialTasks = (userTasks as any[]).filter((t: any) => t.category === 'channel_group' && !t.completed_by_me);
 
-  // Task sections sorted so sections with tasks come first, empty sections go to the bottom
-  const taskSections = [
-    {
-      key: 'partner',
-      title: 'Partner Tasks',
-      tasks: partnerTasks,
-      emptyLabel: 'No partner tasks available right now.',
-      renderRow: (t: any) => <PartnerTaskRow key={t.id} task={t} />,
-    },
-    {
-      key: 'social',
-      title: 'Social Tasks',
-      tasks: socialTasks,
-      emptyLabel: 'No channel/group tasks available right now.',
-      renderRow: (t: any) => <UserTaskRow key={t.id} task={t} />,
-    },
-    {
-      key: 'bot',
-      title: 'Bot Tasks',
-      tasks: botTasks,
-      emptyLabel: 'No bot/website tasks available right now.',
-      renderRow: (t: any) => <UserTaskRow key={t.id} task={t} />,
-    },
-  ].sort((a, b) => {
-    if (a.tasks.length > 0 && b.tasks.length === 0) return -1;
-    if (a.tasks.length === 0 && b.tasks.length > 0) return 1;
-    return 0;
-  });
+  const tabs: { id: EarnTab; label: string }[] = [
+    { id: 'ads', label: 'Ads' },
+    { id: 'social', label: 'Social' },
+    { id: 'partner', label: 'Partner' },
+    { id: 'bot', label: 'Bot' },
+  ];
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0a', display: 'flex', flexDirection: 'column', overflowX: 'hidden', width: '100%' }}>
@@ -839,54 +819,108 @@ export default function Earn() {
 
         <div style={{ padding: '0 16px' }}>
 
-          {/* Special Daily Task */}
-          {!axnNameClaimedToday && (
-            <div style={{ background: CARD, borderRadius: 16, overflow: 'hidden', marginBottom: 18 }}>
-              <AxnNameTaskDaily claimedToday={axnNameClaimedToday} />
+            {/* Earn category tabs */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6,
+              padding: 4, marginBottom: 18, borderRadius: 14,
+              background: 'rgba(255,255,255,0.05)',
+            }}>
+              {tabs.map(tab => {
+                const active = selectedTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setSelectedTab(tab.id)}
+                    aria-pressed={active}
+                    style={{
+                      border: 'none', borderRadius: 10, padding: '9px 4px',
+                      background: active ? '#2563eb' : 'transparent',
+                      color: active ? '#fff' : 'rgba(255,255,255,0.42)',
+                      fontSize: 12, fontWeight: 800, cursor: 'pointer',
+                      transition: 'background 0.18s ease, color 0.18s ease',
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
-          )}
 
-          {/* Earn with Ads — always at top */}
-          <SectionLabel title="Earn with Ads" />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
-            {AD_TASKS.map((t, i) => (
-              <AdProviderRow
-                key={t.provider}
-                slotId={t.slotId}
-                provider={t.provider}
-                statusKey={t.statusKey}
-                reward={providerStatusData?.providers?.[t.statusKey]?.reward ?? t.reward}
-                dailyLimit={providerStatusData?.providers?.[t.statusKey]?.dailyLimit ?? t.dailyLimit}
-                status={providerStatusData?.providers?.[t.statusKey]}
-                isLast={i === AD_TASKS.length - 1}
-              />
-            ))}
-          </div>
+            {/* Ads */}
+            {selectedTab === 'ads' && (
+              <>
+                {!axnNameClaimedToday && (
+                  <div style={{ background: CARD, borderRadius: 16, overflow: 'hidden', marginBottom: 18 }}>
+                    <AxnNameTaskDaily claimedToday={axnNameClaimedToday} />
+                  </div>
+                )}
+                <SectionLabel title="Earn with Ads" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
+                  {AD_TASKS.map((t, i) => (
+                    <AdProviderRow
+                      key={t.provider}
+                      slotId={t.slotId}
+                      provider={t.provider}
+                      statusKey={t.statusKey}
+                      reward={providerStatusData?.providers?.[t.statusKey]?.reward ?? t.reward}
+                      dailyLimit={providerStatusData?.providers?.[t.statusKey]?.dailyLimit ?? t.dailyLimit}
+                      status={providerStatusData?.providers?.[t.statusKey]}
+                      isLast={i === AD_TASKS.length - 1}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
 
-          {/* Dynamic sections: tasks-first ordering */}
-          {taskSections.map(section => (
-            <div key={section.key}>
-              <SectionLabel title={section.title} />
-              <div style={{ background: CARD, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
-                {section.tasks.length > 0
-                  ? section.tasks.map(section.renderRow)
-                  : <EmptyTaskState label={section.emptyLabel} />
-                }
+            {/* Social */}
+            {selectedTab === 'social' && (
+              <>
+                <SectionLabel title="Social Tasks" />
+                <div style={{ background: CARD, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
+                  {socialTasks.length > 0
+                    ? socialTasks.map((task: any) => <UserTaskRow key={task.id} task={task} />)
+                    : <EmptyTaskState label="No channel/group tasks available right now." />}
+                </div>
+              </>
+            )}
+
+            {/* Partner */}
+            {selectedTab === 'partner' && (
+              <>
+                <SectionLabel title="Partner Tasks" />
+                <div style={{ background: CARD, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
+                  {partnerTasks.length > 0
+                    ? partnerTasks.map((task: any) => <PartnerTaskRow key={task.id} task={task} />)
+                    : <EmptyTaskState label="No partner tasks available right now." />}
+                </div>
+              </>
+            )}
+
+            {/* Bot */}
+            {selectedTab === 'bot' && (
+              <>
+                <SectionLabel title="Bot Tasks" />
+                <div style={{ background: CARD, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
+                  {botTasks.length > 0
+                    ? botTasks.map((task: any) => <UserTaskRow key={task.id} task={task} />)
+                    : <EmptyTaskState label="No bot/website tasks available right now." />}
               </div>
-            </div>
-          ))}
+              </>
+            )}
 
-          {/* Info note */}
-          <div style={{ background: 'rgba(37,99,235,0.06)', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={BLUE} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="16" x2="12" y2="12"/>
-              <line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, lineHeight: 1.5 }}>
-              Each CIPHER earned increases your Season Drop chance. Watch more ads to maximize your rewards.
-            </span>
-          </div>
+            {/* Info note */}
+            {selectedTab === 'ads' && (
+              <div style={{ background: 'rgba(37,99,235,0.06)', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={BLUE} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="16" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, lineHeight: 1.5 }}>
+                  Each CIPHER earned increases your Season Drop chance. Watch more ads to maximize your rewards.
+                </span>
+              </div>
+            )}
 
         </div>
       </div>
