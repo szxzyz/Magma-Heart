@@ -10,6 +10,7 @@ import { useAdmin } from "@/hooks/useAdmin";
 import { getGramPrice, axnToGram, gramToUsd, formatGram, formatUsd } from "@/lib/tonPriceService";
 import { ArrowUpRight, History, Loader2, Receipt } from "lucide-react";
 import { AXNIcon } from "@/components/AXNIcon";
+import PopupShell from "@/components/PopupShell";
 const AXN_PER_GRAM = 100000;
 
 export default function Games() {
@@ -308,18 +309,8 @@ export default function Games() {
 
       {/* Staking Popup */}
       {showStakingPopup && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 900, display: 'flex', alignItems: 'flex-end' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={() => setShowStakingPopup(false)} />
-          <div style={{
-            position: 'relative', width: '100%',
-            background: 'linear-gradient(160deg, #0d0d0f 0%, #111118 100%)',
-            border: '1px solid rgba(37,99,235,0.25)',
-            borderRadius: '28px 28px 0 0', padding: '28px 20px', paddingBottom: 'max(52px, calc(env(safe-area-inset-bottom, 0px) + 28px))', zIndex: 901, textAlign: 'center',
-            boxShadow: '0 -8px 60px rgba(37,99,235,0.2), 0 0 0 1px rgba(255,255,255,0.03)',
-            overflow: 'hidden',
-          }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, #2563eb, #3b82f6, #2563eb, transparent)', animation: 'popup-glow 2s ease-in-out infinite' }} />
-            <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '0 auto 24px' }} />
+        <PopupShell onClose={() => setShowStakingPopup(false)}>
+          <div style={{ textAlign: 'center' }}>
             <div style={{
               width: 64, height: 64, borderRadius: '50%', margin: '0 auto 18px',
               background: 'linear-gradient(135deg, rgba(37,99,235,0.2), rgba(59,130,246,0.1))',
@@ -353,7 +344,7 @@ export default function Games() {
               boxShadow: '0 4px 20px rgba(37,99,235,0.4)',
             }} className="active:scale-95 transition-transform">Got it</button>
           </div>
-        </div>
+        </PopupShell>
       )}
 
       {menuOpen && <MenuPopup onClose={() => setMenuOpen(false)} />}
@@ -610,19 +601,7 @@ function PromoPopup({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
   const buttonLabel = adStep === 'redeeming' ? 'Redeeming...' : 'Redeem';
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 900, display: 'flex', alignItems: 'flex-end' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={!loading ? onClose : undefined} />
-      <div style={{
-        position: 'relative', width: '100%',
-        background: 'linear-gradient(160deg, #0d0d0f 0%, #111118 100%)',
-        border: '1px solid rgba(37,99,235,0.25)',
-        borderRadius: '28px 28px 0 0', padding: '24px 20px 52px', zIndex: 901,
-        boxShadow: '0 -8px 60px rgba(37,99,235,0.2)',
-        overflow: 'hidden',
-      }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, #2563eb, #3b82f6, #2563eb, transparent)' }} />
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '0 auto 22px' }} />
-
+    <PopupShell onClose={onClose} closeOnBackdrop={!loading}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <span style={{ fontSize: 18, fontWeight: 900, color: '#fff' }}>Promo Code</span>
         </div>
@@ -658,7 +637,6 @@ function PromoPopup({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
         >
           {buttonLabel}
         </button>
-      </div>
-    </div>
+    </PopupShell>
   );
 }

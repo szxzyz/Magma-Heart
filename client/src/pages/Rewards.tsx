@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { showNotification } from "@/components/AppNotification";
 import { apiRequest } from "@/lib/queryClient";
 import MenuPopup from "@/components/MenuPopup";
+import PopupShell from "@/components/PopupShell";
 import Header from "@/components/Header";
 import { showRewardedInterstitial } from "@/lib/showAd";
 import { MACHINE_TYPES } from "../../../shared/machineTypes";
@@ -84,19 +85,20 @@ function NFTDetailsSheet({
   onClose: () => void;
 }) {
   const sortedMachines = [...machines].sort((a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime());
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const selectedMachine = sortedMachines[selectedIndex];
+
+  if (!selectedMachine) return null;
+
+  const expiresAt = new Date(selectedMachine.expiresAt).getTime();
+  const remainingSeconds = Math.max(0, Math.floor((expiresAt - now) / 1000));
+  const status = getMachineStatus(remainingSeconds);
+  const currentReward = getMachineUnclaimed(selectedMachine, machineType, now);
+  const claimWindow = getClaimWindow(selectedMachine, now);
+  const showClaimReminder = remainingSeconds > 0 && claimWindow.overdue;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'flex-end' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={onClose} />
-      <div style={{
-        position: 'relative', width: '100%', maxHeight: '82vh', overflowY: 'auto',
-        background: 'linear-gradient(160deg, #0d0d0f, #111118)', border: '1px solid rgba(255,255,255,0.06)',
-        borderRadius: '28px 28px 0 0', padding: '28px 20px',
-        paddingBottom: 'max(48px, calc(env(safe-area-inset-bottom, 0px) + 24px))',
-      }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, #2563eb, #3b82f6, #2563eb, transparent)' }} />
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '0 auto 24px' }} />
-
+    <PopupShell onClose={onClose} maxWidth={430} zIndex={1100}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
           <div style={{ width: 44, height: 44, borderRadius: 12, overflow: 'hidden', flexShrink: 0, background: '#16181d' }}>
             <img
@@ -117,54 +119,63 @@ function NFTDetailsSheet({
           </div>
         </div>
 
-        {sortedMachines.map((machine, idx) => {
-          const expiresAt = new Date(machine.expiresAt).getTime();
-          const remainingSeconds = Math.max(0, Math.floor((expiresAt - now) / 1000));
-          const status = getMachineStatus(remainingSeconds);
-          const currentReward = getMachineUnclaimed(machine, machineType, now);
-          const claimWindow = getClaimWindow(machine, now);
-          const showClaimReminder = remainingSeconds > 0 && claimWindow.overdue;
-
-          return (
-            <div key={machine.id ?? idx} style={{
-              background: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: '14px 16px', marginBottom: 10,
+        <div style={{
+          background: 'rgba(255,255,255,0.04)', borderRadius: 14, padding: '14px 16px', marginBottom: 14,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 700 }}>
+              NFT {selectedIndex + 1} of {sortedMachines.length}
+            </span>
+            <span style={{
+              fontSize: 10, fontWeight: 800, letterSpacing: '0.03em', color: status.color,
+              background: status.color === '#4ade80' ? 'rgba(74,222,128,0.12)' : status.color === '#facc15' ? 'rgba(250,204,21,0.12)' : 'rgba(255,255,255,0.06)',
+              borderRadius: 20, padding: '3px 9px',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 700 }}>Plan #{sortedMachines.length - idx}</span>
-                <span style={{
-                  fontSize: 10, fontWeight: 800, letterSpacing: '0.03em', color: status.color,
-                  background: status.color === '#4ade80' ? 'rgba(74,222,128,0.12)' : status.color === '#facc15' ? 'rgba(250,204,21,0.12)' : 'rgba(255,255,255,0.06)',
-                  borderRadius: 20, padding: '3px 9px',
-                }}>
-                  {status.label.toUpperCase()}
-                </span>
-              </div>
+              {status.label.toUpperCase()}
+            </span>
+          </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Purchase time</span>
-                <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>{fmtDateTime(machine.purchasedAt)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Expiry time</span>
-                <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>{fmtDateTime(machine.expiresAt)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: showClaimReminder ? 8 : 0, marginBottom: showClaimReminder ? 8 : 0, borderBottom: showClaimReminder ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Current reward</span>
-                <span style={{ color: '#4ade80', fontSize: 12, fontWeight: 800 }}>{fmtNum(currentReward)} AXN</span>
-              </div>
-              {showClaimReminder && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#facc15', fontSize: 11 }}>⏰ Claim overdue</span>
-                  <span style={{ color: '#facc15', fontSize: 11, fontWeight: 700 }}>{Math.floor(claimWindow.hoursSinceClaim)}h since last claim</span>
-                </div>
-              )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Purchase time</span>
+            <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>{fmtDateTime(selectedMachine.purchasedAt)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Expiry time</span>
+            <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>{fmtDateTime(selectedMachine.expiresAt)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: showClaimReminder ? 8 : 0, marginBottom: showClaimReminder ? 8 : 0, borderBottom: showClaimReminder ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Current reward</span>
+            <span style={{ color: '#4ade80', fontSize: 12, fontWeight: 800 }}>{fmtNum(currentReward)} AXN</span>
+          </div>
+          {showClaimReminder && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#facc15', fontSize: 11 }}>⏰ Claim overdue</span>
+              <span style={{ color: '#facc15', fontSize: 11, fontWeight: 700 }}>{Math.floor(claimWindow.hoursSinceClaim)}h since last claim</span>
             </div>
-          );
-        })}
+          )}
+        </div>
 
-        <button onClick={onClose} style={{ width: '100%', padding: '14px 0', marginTop: 4, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 800, cursor: 'pointer' }} className="active:scale-95 transition-transform">Close</button>
-      </div>
-    </div>
+        {sortedMachines.length > 1 && (
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <button
+              onClick={() => setSelectedIndex(index => Math.max(0, index - 1))}
+              disabled={selectedIndex === 0}
+              style={{ flex: 1, padding: '11px 0', border: '1px solid rgba(255,255,255,0.08)', background: selectedIndex === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(37,99,235,0.12)', color: selectedIndex === 0 ? 'rgba(255,255,255,0.2)' : '#93c5fd', fontSize: 12, fontWeight: 800, cursor: selectedIndex === 0 ? 'not-allowed' : 'pointer', clipPath: 'polygon(8px 0%,calc(100% - 8px) 0%,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0% calc(100% - 8px),0% 8px)' }}
+            >
+              ← Previous
+            </button>
+            <button
+              onClick={() => setSelectedIndex(index => Math.min(sortedMachines.length - 1, index + 1))}
+              disabled={selectedIndex === sortedMachines.length - 1}
+              style={{ flex: 1, padding: '11px 0', border: '1px solid rgba(255,255,255,0.08)', background: selectedIndex === sortedMachines.length - 1 ? 'rgba(255,255,255,0.03)' : 'rgba(37,99,235,0.12)', color: selectedIndex === sortedMachines.length - 1 ? 'rgba(255,255,255,0.2)' : '#93c5fd', fontSize: 12, fontWeight: 800, cursor: selectedIndex === sortedMachines.length - 1 ? 'not-allowed' : 'pointer', clipPath: 'polygon(8px 0%,calc(100% - 8px) 0%,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0% calc(100% - 8px),0% 8px)' }}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+
+        <button onClick={onClose} style={{ width: '100%', padding: '12px 0', marginTop: 4, background: 'rgba(255,255,255,0.06)', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 800, cursor: 'pointer', clipPath: 'polygon(8px 0%,calc(100% - 8px) 0%,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0% calc(100% - 8px),0% 8px)' }} className="active:scale-95 transition-transform">Close</button>
+    </PopupShell>
   );
 }
 
@@ -326,11 +337,7 @@ function FarmingCard({
     )}
 
     {showWarning && (
-      <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'flex-end' }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={() => setShowWarning(false)} />
-        <div style={{ position: 'relative', width: '100%', background: 'linear-gradient(160deg, #0d0d0f, #111118)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '28px 28px 0 0', padding: '28px 20px', paddingBottom: 'max(48px, calc(env(safe-area-inset-bottom, 0px) + 24px))', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)' }} />
-          <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '0 auto 24px' }} />
+      <PopupShell onClose={() => setShowWarning(false)} maxWidth={430} zIndex={1100}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
             <div style={{ width: 54, height: 54, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={claimOverdue ? '#facc15' : 'rgba(255,255,255,0.5)'} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -348,8 +355,7 @@ function FarmingCard({
             </div>
             <button onClick={() => setShowWarning(false)} style={{ width: '100%', padding: '14px 0', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 800, cursor: 'pointer' }} className="active:scale-95 transition-transform">OK</button>
           </div>
-        </div>
-      </div>
+      </PopupShell>
     )}
     </>
   );
@@ -730,11 +736,7 @@ export default function Rewards() {
 
         {/* Farm Info Popup — bottom sheet */}
         {showFarmInfo && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'flex-end' }}>
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={() => setShowFarmInfo(false)} />
-            <div style={{ position: 'relative', width: '100%', background: 'linear-gradient(160deg, #0d0d0f, #111118)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '28px 28px 0 0', padding: '28px 20px', paddingBottom: 'max(48px, calc(env(safe-area-inset-bottom, 0px) + 24px))', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, #2563eb, #3b82f6, #2563eb, transparent)' }} />
-              <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '0 auto 24px' }} />
+          <PopupShell onClose={() => setShowFarmInfo(false)} maxWidth={430} zIndex={1100}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
                 <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', background: '#000', flexShrink: 0 }}>
                   <img src="/axn-coin.jpg" alt="AXN" style={{ width: '110%', height: '110%', objectFit: 'cover' }} />
@@ -762,17 +764,12 @@ export default function Rewards() {
                 ))}
               </div>
               <button onClick={() => setShowFarmInfo(false)} style={{ width: '100%', padding: '14px 0', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 800, cursor: 'pointer' }} className="active:scale-95 transition-transform">Got it</button>
-            </div>
-          </div>
+          </PopupShell>
         )}
 
         {/* Alert Popup — bottom sheet */}
         {showAlertPopup && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'flex-end' }}>
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={() => setShowAlertPopup(false)} />
-            <div style={{ position: 'relative', width: '100%', background: 'linear-gradient(160deg, #0d0d0f, #111118)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '28px 28px 0 0', padding: '28px 20px', paddingBottom: 'max(48px, calc(env(safe-area-inset-bottom, 0px) + 24px))', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)' }} />
-              <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', margin: '0 auto 24px' }} />
+          <PopupShell onClose={() => setShowAlertPopup(false)} maxWidth={430} zIndex={1100}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ width: 54, height: 54, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -785,24 +782,15 @@ export default function Rewards() {
                 </div>
                 <button onClick={() => setShowAlertPopup(false)} style={{ width: '100%', padding: '14px 0', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 800, cursor: 'pointer' }} className="active:scale-95 transition-transform">OK</button>
               </div>
-            </div>
-          </div>
+          </PopupShell>
         )}
 
       </div>
 
       {/* Mystery Box Popup */}
       {mysteryPhase !== 'idle' && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 950, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)' }} />
-          <div style={{
-            position: 'relative', width: '85%', maxWidth: 320,
-            background: 'linear-gradient(160deg, #0d0d0f 0%, #111118 100%)',
-            border: '1px solid rgba(37,99,235,0.22)',
-            borderRadius: 24, padding: '36px 24px 28px',
-            textAlign: 'center', zIndex: 951,
-            boxShadow: '0 0 60px rgba(37,99,235,0.15), 0 -4px 20px rgba(37,99,235,0.08)',
-          }}>
+        <PopupShell onClose={() => mysteryPhase === 'done' && setMysteryPhase('idle')} maxWidth={340} zIndex={950} closeOnBackdrop={mysteryPhase === 'done'}>
+          <div style={{ textAlign: 'center' }}>
             <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
               {mysteryPhase === 'opening' && (
                 <div style={{
@@ -865,7 +853,7 @@ export default function Rewards() {
               </div>
             )}
           </div>
-        </div>
+        </PopupShell>
       )}
 
       {menuOpen && <MenuPopup onClose={() => setMenuOpen(false)} />}

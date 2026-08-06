@@ -4,6 +4,7 @@ import { showNotification } from "@/components/AppNotification";
 import { apiRequest } from "@/lib/queryClient";
 import Header from "@/components/Header";
 import MenuPopup from "@/components/MenuPopup";
+import PopupShell from "@/components/PopupShell";
 import { MACHINE_TYPES, type MachineType } from "../../../shared/machineTypes";
 
 function fmtNum(n: number): string {
@@ -123,18 +124,7 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
   const canAfford = cipherBalance >= machine.priceCipher;
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 1000,
-      background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
-    }}>
-      <div style={{
-        background: "#0d0d0f", borderRadius: "18px 18px 0 0",
-        border: "1px solid rgba(255,255,255,0.08)",
-        width: "100%", maxWidth: 480, padding: "24px 20px 32px",
-      }}>
-        <div style={{ width: 36, height: 4, background: "rgba(255,255,255,0.15)", borderRadius: 2, margin: "0 auto 20px" }} />
-
+    <PopupShell onClose={onCancel} maxWidth={480}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: "#fff", marginBottom: 6 }}>Confirm Purchase</div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)" }}>You are about to buy:</div>
@@ -206,8 +196,7 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
             {loading ? "Buying…" : "Confirm Purchase"}
           </button>
         </div>
-      </div>
-    </div>
+    </PopupShell>
   );
 }
 
