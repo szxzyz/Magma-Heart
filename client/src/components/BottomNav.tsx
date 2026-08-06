@@ -1,27 +1,10 @@
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { Pickaxe, Gem } from "lucide-react";
 
 const ACTIVE = "#ffffff";
 const DIM = "rgba(255,255,255,0.38)";
-
-const HomeIcon = ({ active, c }: { active: boolean; c: string }) => (
-  <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-    {active ? (
-      <>
-        <path d="M12 2L21.5 7.5V16.5L12 22L2.5 16.5V7.5Z" fill={c} opacity="0.15"/>
-        <path d="M12 2L21.5 7.5V16.5L12 22L2.5 16.5V7.5Z" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
-        <circle cx="12" cy="12" r="2.5" fill={c}/>
-        <circle cx="12" cy="12" r="4.5" stroke={c} strokeWidth="1.2" opacity="0.4"/>
-      </>
-    ) : (
-      <>
-        <path d="M12 2L21.5 7.5V16.5L12 22L2.5 16.5V7.5Z" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
-        <circle cx="12" cy="12" r="2" fill={c} opacity="0.6"/>
-      </>
-    )}
-  </svg>
-);
 
 const TasksIcon = ({ active, c }: { active: boolean; c: string }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -60,25 +43,29 @@ const FriendsIcon = ({ active, c }: { active: boolean; c: string }) => (
   </svg>
 );
 
-const RewardsIcon = ({ active, c }: { active: boolean; c: string }) => (
+// ── MINE icon (mining / rewards) ──
+const MineIcon = ({ active, c }: { active: boolean; c: string }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-    {active ? (
-      <>
-        <rect x="3" y="8" width="18" height="13" rx="2" fill={c} opacity="0.15" stroke={c} strokeWidth="1.8"/>
-        <path d="M3 12h18" stroke={c} strokeWidth="1.8"/>
-        <path d="M12 8v13" stroke={c} strokeWidth="1.8"/>
-        <path d="M12 8H7.5a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8Z" fill={c} opacity="0.2" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
-        <path d="M12 8h4.5a2.5 2.5 0 0 0 0-5C14 3 12 8 12 8Z" fill={c} opacity="0.2" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
-      </>
-    ) : (
-      <>
-        <rect x="3" y="8" width="18" height="13" rx="2" stroke={c} strokeWidth="1.8"/>
-        <path d="M3 12h18" stroke={c} strokeWidth="1.8"/>
-        <path d="M12 8v13" stroke={c} strokeWidth="1.8"/>
-        <path d="M12 8H7.5a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8Z" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
-        <path d="M12 8h4.5a2.5 2.5 0 0 0 0-5C14 3 12 8 12 8Z" stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
-      </>
-    )}
+    <Pickaxe
+      color={c}
+      size={24}
+      strokeWidth={active ? 2.1 : 1.8}
+      fill={active ? c : "none"}
+      fillOpacity={active ? 0.15 : 0}
+    />
+  </svg>
+);
+
+// ── NFT icon (digital collectible) ──
+const NftIcon = ({ active, c }: { active: boolean; c: string }) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <Gem
+      color={c}
+      size={24}
+      strokeWidth={active ? 2.1 : 1.8}
+      fill={active ? c : "none"}
+      fillOpacity={active ? 0.15 : 0}
+    />
   </svg>
 );
 
@@ -102,8 +89,8 @@ const MachineIcon = ({ active, c }: { active: boolean; c: string }) => (
 );
 
 const TABS = [
-  { id: "rewards", label: "Rewards", path: "/rewards", },
-  { id: "machine", label: "Machine", path: "/machine", },
+  { id: "rewards", label: "MINE",    path: "/rewards", },
+  { id: "machine", label: "NFTS",    path: "/machine", },
   { id: "earn",    label: "Task",    path: "/earn",    },
   { id: "friend",  label: "Friends", path: "/friend",  },
   { id: "game",    label: "Assets",  path: "/game",    },
@@ -179,11 +166,11 @@ export default function BottomNav() {
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 40, height: 30, position: "relative",
             }}>
-              {tab.id === "game"    && <HomeIcon    active={on} c={c} />}
+              {tab.id === "game"    && <MachineIcon active={on} c={c} />}
               {tab.id === "earn"    && <TasksIcon   active={on} c={c} />}
               {tab.id === "friend"  && <FriendsIcon active={on} c={c} />}
-              {tab.id === "machine" && <MachineIcon active={on} c={c} />}
-              {tab.id === "rewards" && <RewardsIcon active={on} c={c} />}
+              {tab.id === "machine" && <NftIcon     active={on} c={c} />}
+              {tab.id === "rewards" && <MineIcon    active={on} c={c} />}
 
               {showBadge && (
                 <div style={{
