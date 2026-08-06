@@ -530,7 +530,7 @@ export default function Rewards() {
         {/* DAILY REWARDS */}
         <div style={{ marginBottom: 10 }}>
              <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.3px' }}>
-            <span style={{ color: 'rgba(255,255,255,0.28)' }}>Daily </span>
+            <span style={{ color: '#fff' }}>Daily </span>
             <span style={{ color: '#3b82f6' }}>Rewards</span>
           </span>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>Complete daily tasks and get rewards.</div>
@@ -611,7 +611,7 @@ export default function Rewards() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
           <div>
              <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.3px' }}>
-              <span style={{ color: 'rgba(255,255,255,0.28)' }}>My </span>
+              <span style={{ color: '#fff' }}>My </span>
               <span style={{ color: '#3b82f6' }}>NFTs</span>
             </span>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>

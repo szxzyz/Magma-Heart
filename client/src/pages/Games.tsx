@@ -223,7 +223,7 @@ export default function Games() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <Receipt size={18} color="rgba(255,255,255,0.7)" strokeWidth={1.8} />
             <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.3px' }}>
-              <span style={{ color: 'rgba(255,255,255,0.28)' }}>Transaction </span>
+              <span style={{ color: '#fff' }}>Transaction </span>
               <span style={{ color: '#3b82f6' }}>History</span>
             </span>
           </div>
