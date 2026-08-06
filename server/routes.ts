@@ -578,6 +578,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
+  // GET /api/withdraw/eligibility — everything the Withdraw popup needs to
+  // show requirements/limits before the user submits a request.
+  app.get("/api/withdraw/eligibility", authenticateTelegram, async (req: any, res) => {
+    try {
+      const user = req.user?.user;
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+      const eligibility = await storage.getWithdrawalEligibility(user.id);
+      res.json(eligibility);
+    } catch (error) {
+      console.error("Withdrawal eligibility error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/withdrawals", authenticateTelegram, async (req: any, res) => {
     try {
       const user = req.user?.user;
@@ -587,10 +601,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!amount || isNaN(parseFloat(String(amount))) || parseFloat(String(amount)) <= 0) {
         return res.status(400).json({ message: "Invalid withdrawal amount" });
       }
+      if (!address || typeof address !== 'string' || address.trim().length < 4) {
+        return res.status(400).json({ message: "A valid wallet address is required" });
+      }
 
       const withdrawAmount = parseFloat(String(amount));
-      // All balance validation (including race-condition-safe balance check) happens inside createPayoutRequest transaction
-      const result = await storage.createPayoutRequest(user.id, withdrawAmount.toString(), 'sat_withdraw', address);
+      // All rule validation (ads completed today, 1-per-day, min/max, balance)
+      // and the balance deduction happen atomically inside this call.
+      const result = await storage.createAxnWithdrawalRequest(user.id, withdrawAmount.toString(), address.trim());
       if (!result.success) return res.status(400).json({ message: result.message });
 
       // Send real-time balance update + withdrawal notification to the user immediately

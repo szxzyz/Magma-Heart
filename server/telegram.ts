@@ -495,11 +495,13 @@ export async function sendWithdrawalRequestNotification(withdrawal: any, user: a
   }
 
   try {
-    const netAmount = parseFloat(withdrawal.amount);
-    const feeAmount = parseFloat((withdrawal.details as any)?.fee || '0');
-    const feePercent = (withdrawal.details as any)?.feePercent || '0';
-    const walletAddress = (withdrawal.details as any)?.paymentDetails || (withdrawal.details as any)?.walletAddress || 'N/A';
-    
+    const details = (withdrawal.details as any) || {};
+    const netAmount = parseFloat(details.netAmount || withdrawal.amount);
+    const requestedAmount = parseFloat(details.requestedAmount || withdrawal.amount);
+    const feeAmount = parseFloat(details.fee || '0');
+    const feePercent = details.feePercent || '0';
+    const walletAddress = details.paymentDetails || details.walletAddress || 'N/A';
+
     const userName = user?.firstName || user?.username || 'Unknown';
     const userTelegramId = user?.telegram_id || '';
     const userTelegramUsername = user?.username ? `@${user.username}` : 'N/A';
@@ -507,12 +509,14 @@ export async function sendWithdrawalRequestNotification(withdrawal: any, user: a
 
     const _botName = await getBotUsername();
     const message = `💰 <b>Withdrawal Request</b>\n\n` +
-                 `🗣 User: ${escapeHtml(userName)}\n` +
+                 `🗣 Name: ${escapeHtml(userName)}\n` +
+                 `👤 Username: ${escapeHtml(userTelegramUsername)}\n` +
                  `🆔 User ID: <code>${userTelegramId}</code>\n` +
-                 `🌐 Address: <code>${walletAddress}</code>\n` +
-                 `💸 Amount: ${format$(netAmount)} AXN\n` +
-                 `🛂 Fee: 100 AXN\n` +
-                 `📅 Date: ${currentDate}\n` +
+                 `🌐 Wallet Address: <code>${walletAddress}</code>\n` +
+                 `💸 Withdrawal Amount: ${format$(requestedAmount)} AXN\n` +
+                 `🛂 Fee (${feePercent}%): ${format$(feeAmount)} AXN\n` +
+                 `✅ Final Amount: ${format$(netAmount)} AXN\n` +
+                 `📅 Request Time: ${currentDate}\n` +
                  `🤖 Bot: @${_botName}`;
 
     const replyMarkup = {

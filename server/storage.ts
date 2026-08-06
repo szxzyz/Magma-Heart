@@ -1443,6 +1443,202 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // ─── AXN Withdrawal Requests (manual admin approval — no auto-send) ───
+  //
+  // Rules:
+  //  - 1 request per user per calendar day (UTC), regardless of outcome
+  //  - Today's 30 daily ads (10 each across 3 ad providers) must be fully watched
+  //  - Without any prior CIPHER deposit: min 10,000 AXN, max 100,000 AXN / day
+  //  - With a prior deposit: min 10,000 AXN, no daily maximum
+  //  - Flat 10% fee is deducted; admin sends the net amount manually with a tx hash
+  async getWithdrawalEligibility(userId: string): Promise<{
+    adsCompletedToday: number;
+    adsRequiredToday: number;
+    adsRemaining: number;
+    hasCompletedAdsToday: boolean;
+    hasWithdrawnToday: boolean;
+    hasDeposited: boolean;
+    minWithdrawal: number;
+    maxDailyWithdrawal: number | null;
+    balance: number;
+  }> {
+    const { pool } = await import('./db');
+    const todayDate = new Date().toISOString().slice(0, 10);
+
+    const AD_SLOTS = [1, 2, 3];
+    const AD_DAILY_LIMIT_PER_SLOT = 10;
+    const adsRequiredToday = AD_SLOTS.length * AD_DAILY_LIMIT_PER_SLOT;
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ad_slot_watches (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR NOT NULL,
+        slot INTEGER NOT NULL,
+        watch_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        watch_count INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(user_id, slot, watch_date)
+      )
+    `);
+
+    const adRows = await pool.query(
+      `SELECT slot, watch_count FROM ad_slot_watches WHERE user_id = $1 AND watch_date = $2::date`,
+      [userId, todayDate]
+    );
+    const watchedBySlot: Record<number, number> = {};
+    for (const row of adRows.rows) {
+      watchedBySlot[Number(row.slot)] = Number(row.watch_count);
+    }
+    const adsCompletedToday = AD_SLOTS.reduce(
+      (sum, slot) => sum + Math.min(watchedBySlot[slot] || 0, AD_DAILY_LIMIT_PER_SLOT),
+      0
+    );
+
+    const withdrawnTodayRows = await pool.query(
+      `SELECT id FROM withdrawals WHERE user_id = $1 AND DATE(created_at) = $2::date LIMIT 1`,
+      [userId, todayDate]
+    );
+
+    const depositRows = await pool.query(
+      `SELECT id FROM cipher_deposits WHERE user_id = $1 AND status = 'credited' LIMIT 1`,
+      [userId]
+    );
+    const hasDeposited = depositRows.rows.length > 0;
+
+    const user = await this.getUser(userId);
+    const balance = parseFloat(user?.walletBalance?.toString() || '0');
+
+    return {
+      adsCompletedToday,
+      adsRequiredToday,
+      adsRemaining: Math.max(0, adsRequiredToday - adsCompletedToday),
+      hasCompletedAdsToday: adsCompletedToday >= adsRequiredToday,
+      hasWithdrawnToday: withdrawnTodayRows.rows.length > 0,
+      hasDeposited,
+      minWithdrawal: 10000,
+      maxDailyWithdrawal: hasDeposited ? null : 100000,
+      balance,
+    };
+  }
+
+  async createAxnWithdrawalRequest(userId: string, amount: string, walletAddress: string): Promise<{
+    success: boolean;
+    message: string;
+    withdrawalId?: string;
+    netAmount?: number;
+    fee?: number;
+  }> {
+    try {
+      if (!walletAddress || walletAddress.trim().length < 4) {
+        return { success: false, message: 'A valid wallet address is required' };
+      }
+
+      const requestedAmount = parseFloat(amount);
+      if (!requestedAmount || isNaN(requestedAmount) || requestedAmount <= 0) {
+        return { success: false, message: 'Invalid withdrawal amount' };
+      }
+
+      const eligibility = await this.getWithdrawalEligibility(userId);
+
+      if (!eligibility.hasCompletedAdsToday) {
+        return {
+          success: false,
+          message: `Complete all ${eligibility.adsRequiredToday} daily ads on the Task page before withdrawing (${eligibility.adsCompletedToday}/${eligibility.adsRequiredToday} done today).`,
+        };
+      }
+
+      if (eligibility.hasWithdrawnToday) {
+        return { success: false, message: 'You can only submit one withdrawal request per day. Please try again tomorrow.' };
+      }
+
+      if (requestedAmount < eligibility.minWithdrawal) {
+        return { success: false, message: `Minimum withdrawal is ${eligibility.minWithdrawal.toLocaleString()} AXN` };
+      }
+
+      if (eligibility.maxDailyWithdrawal !== null && requestedAmount > eligibility.maxDailyWithdrawal) {
+        return { success: false, message: `Maximum daily withdrawal is ${eligibility.maxDailyWithdrawal.toLocaleString()} AXN` };
+      }
+
+      const FEE_RATE = 0.10;
+      const fee = requestedAmount * FEE_RATE;
+      const netAmount = requestedAmount - fee;
+
+      const { pool } = await import('./db');
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Re-check "one request per day" and lock the user row inside the transaction
+        // to prevent a race between two simultaneous submissions.
+        const todayDate = new Date().toISOString().slice(0, 10);
+        const withdrawnToday = await client.query(
+          `SELECT id FROM withdrawals WHERE user_id = $1 AND DATE(created_at) = $2::date LIMIT 1`,
+          [userId, todayDate]
+        );
+        if (withdrawnToday.rows.length > 0) {
+          await client.query('ROLLBACK');
+          return { success: false, message: 'You can only submit one withdrawal request per day. Please try again tomorrow.' };
+        }
+
+        const userRows = await client.query(`SELECT wallet_balance FROM users WHERE id = $1 FOR UPDATE`, [userId]);
+        if (userRows.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return { success: false, message: 'User not found' };
+        }
+
+        const currentBalance = parseFloat(userRows.rows[0].wallet_balance || '0');
+        if (currentBalance < requestedAmount) {
+          await client.query('ROLLBACK');
+          return {
+            success: false,
+            message: `Insufficient AXN balance. You have ${Math.floor(currentBalance)} AXN, but requested ${Math.floor(requestedAmount)} AXN.`,
+          };
+        }
+
+        const newBalance = (currentBalance - requestedAmount).toFixed(4);
+        await client.query(
+          `UPDATE users SET wallet_balance = $1, updated_at = NOW() WHERE id = $2`,
+          [newBalance, userId]
+        );
+
+        const withdrawalDetails = {
+          paymentSystem: 'AXN',
+          paymentDetails: walletAddress,
+          paymentSystemId: 'axn_withdraw',
+          requestedAmount: requestedAmount.toString(),
+          fee: fee.toFixed(4),
+          feePercent: '10',
+          netAmount: netAmount.toFixed(4),
+          totalDeducted: requestedAmount.toString(),
+        };
+
+        const insertResult = await client.query(
+          `INSERT INTO withdrawals (user_id, amount, status, method, details, deducted, refunded)
+           VALUES ($1, $2, 'pending', 'AXN', $3, TRUE, FALSE)
+           RETURNING id`,
+          [userId, netAmount.toFixed(4), JSON.stringify(withdrawalDetails)]
+        );
+
+        await client.query('COMMIT');
+
+        return {
+          success: true,
+          message: `Withdrawal request submitted. You will receive ${netAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} AXN after admin approval.`,
+          withdrawalId: insertResult.rows[0].id,
+          netAmount,
+          fee,
+        };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('Error creating AXN withdrawal request:', error);
+      return { success: false, message: 'Error processing withdrawal request' };
+    }
+  }
+
   async getAppStats(): Promise<{
     totalUsers: number;
     activeUsersToday: number;
