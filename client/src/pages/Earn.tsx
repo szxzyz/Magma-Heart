@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { Check, Play } from "lucide-react";
 import Header from "@/components/Header";
 import MenuPopup from "@/components/MenuPopup";
 import { showNotification } from "@/components/AppNotification";
@@ -13,111 +14,161 @@ const CARD = 'rgba(255,255,255,0.07)';
 const TEXT = '#fff';
 const TEXT_DIM = 'rgba(255,255,255,0.35)';
 
-function getTodayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-function getSlotCount(slotId: number): number {
-  return parseInt(localStorage.getItem(`ad_slot_count_${slotId}_${getTodayKey()}`) || '0', 10);
-}
-function incrementSlotCount(slotId: number): number {
-  const key = `ad_slot_count_${slotId}_${getTodayKey()}`;
-  const next = getSlotCount(slotId) + 1;
-  localStorage.setItem(key, String(next));
-  return next;
-}
+type AdProvider = 'Monetag' | 'AdsGram' | 'Gigapub';
+type ProviderKey = 'Monetag' | 'AdsGram' | 'Gigapub';
+type ProviderStatus = {
+  slot: number;
+  reward: number;
+  dailyLimit: number;
+  watched: number;
+  remaining: number;
+  resetAt: string;
+  resetMs: number;
+};
+type ProviderStatusMap = Partial<Record<ProviderKey, ProviderStatus>>;
 
-type AdProvider = 'Monetag' | 'Adgram' | 'Gigapub';
-const AD_TASKS: { id: number; provider: AdProvider; desc: string; reward: number; dailyLimit: number }[] = [
-  { id: 1, provider: 'Monetag',  desc: '', reward: 10, dailyLimit: 50 },
-  { id: 2, provider: 'Adgram',   desc: '', reward: 10, dailyLimit: 10 },
-  { id: 3, provider: 'Gigapub',  desc: '', reward: 10, dailyLimit: 30 },
+const AD_TASKS: { slotId: number; provider: AdProvider; statusKey: ProviderKey; reward: number; dailyLimit: number }[] = [
+  { slotId: 2, provider: 'AdsGram', statusKey: 'AdsGram', reward: 700, dailyLimit: 10 },
+  { slotId: 1, provider: 'Monetag', statusKey: 'Monetag', reward: 500, dailyLimit: 10 },
+  { slotId: 3, provider: 'Gigapub', statusKey: 'Gigapub', reward: 500, dailyLimit: 10 },
 ];
 async function runAdForProvider(provider: AdProvider): Promise<void> {
   if (provider === 'Monetag') await showMonatagRewardedAd();
-  else if (provider === 'Adgram') await showAdgramAd();
+  else if (provider === 'AdsGram') await showAdgramAd();
   else await showGigapubAd();
 }
-type AdState = 'idle' | 'loading' | 'claiming';
 const PROVIDER_LOGOS: Record<AdProvider, string> = {
   Monetag: '/monetag-logo.jpg',
-  Adgram:  '/adsgram-logo.jpg',
+  AdsGram: '/adsgram-logo.jpg',
   Gigapub: '/gigapub-logo.jpg',
 };
-const ProviderIcon = ({ provider }: { provider: AdProvider }) => (
-  <img src={PROVIDER_LOGOS[provider]} alt={provider} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', display: 'block' }} />
-);
+const providerStatusKey = ['/api/ads/provider-status'];
 
-function AdRow({ slotId, provider, desc, reward, dailyLimit, isLast }: {
-  slotId: number; provider: AdProvider; desc: string; reward: number; dailyLimit: number; isLast: boolean;
+function updateProviderCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  statusKey: ProviderKey,
+  next: Partial<ProviderStatus>,
+) {
+  queryClient.setQueryData(providerStatusKey, (old: { providers?: ProviderStatusMap } | undefined) => {
+    if (!old?.providers?.[statusKey]) return old;
+    return { ...old, providers: { ...old.providers, [statusKey]: { ...old.providers[statusKey], ...next } } };
+  });
+}
+
+function AdProviderRow({
+  slotId, provider, statusKey, reward, dailyLimit, status, isLast,
+}: {
+  slotId: number; provider: AdProvider; statusKey: ProviderKey; reward: number; dailyLimit: number;
+  status?: ProviderStatus; isLast: boolean;
 }) {
-  const [state, setState] = useState<AdState>('idle');
-  const [count, setCount] = useState(() => getSlotCount(slotId));
+  const [state, setState] = useState<'idle' | 'loading' | 'claiming'>('idle');
   const queryClient = useQueryClient();
-  const atLimit = count >= dailyLimit;
+  const remaining = status?.remaining ?? dailyLimit;
+  const done = remaining <= 0;
   const busy = state !== 'idle';
 
-  const handleWatch = useCallback(async () => {
-    if (busy || atLimit) return;
+  const handleWatch = async () => {
+    if (busy || done) return;
     setState('loading');
-    try { await runAdForProvider(provider); } catch {
+    try {
+      await runAdForProvider(provider);
+    } catch {
       setState('idle');
-      showNotification('Ad did not complete. Please try again.', 'error');
+      showNotification('Ad did not complete. No reward was given.', 'error');
       return;
     }
+
     setState('claiming');
     try {
       const res = await apiRequest('POST', '/api/ads/slot-watch', { slot: slotId });
       const data = await res.json();
-      const earned = data.rewardAXN ?? reward;
-      const newCount = incrementSlotCount(slotId);
-      setCount(newCount);
+      const earned = Number(data.rewardAXN ?? reward);
+      const nextWatched = Number(data.currentCount ?? (status?.watched ?? 0) + 1);
+      updateProviderCache(queryClient, statusKey, {
+        watched: nextWatched,
+        remaining: Math.max(0, dailyLimit - nextWatched),
+        resetMs: Number(data.cooldownMs ?? status?.resetMs ?? 0),
+      });
       queryClient.setQueryData(['/api/auth/user'], (old: any) => {
         if (!old) return old;
         return { ...old, balance: String(Math.floor(parseFloat(old.balance || '0') + earned)) };
       });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-      showNotification(`+${earned} CIPHER earned!`, 'success');
-    } catch (e: any) {
-      let msg = 'Failed to claim. Try again.';
-      try { const p = JSON.parse(e.message); if (p.message) msg = p.message; } catch {}
-      showNotification(msg, 'error');
+      showNotification(`+${earned.toLocaleString()} CIPHER earned!`, 'success');
+    } catch (error: any) {
+      let message = 'Failed to claim. Try again.';
+      try { const parsed = JSON.parse(error.message); if (parsed.message) message = parsed.message; } catch {}
+      queryClient.invalidateQueries({ queryKey: providerStatusKey });
+      showNotification(message, 'error');
+    } finally {
+      setState('idle');
     }
-    setState('idle');
-  }, [busy, atLimit, provider, slotId, reward, queryClient]);
-
-  const btnLabel = state === 'loading' ? 'Loading…' : state === 'claiming' ? 'Saving…' : atLimit ? 'DONE' : 'WATCH';
+  };
 
   return (
-    <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 16px' }}>
-        {atLimit
-          ? <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="20 6 9 17 4 12"/></svg>
-          : <img src={PROVIDER_LOGOS[provider]} alt={provider} style={{ width: 26, height: 26, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
-        }
+    <div style={{
+      width: '100%', borderRadius: 18, overflow: 'hidden',
+      marginBottom: 0, background: '#1a1a1a',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px' }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+          overflow: 'hidden', background: 'rgba(59,130,246,0.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <img
+            src={PROVIDER_LOGOS[provider]}
+            alt={provider}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: done ? 'grayscale(0.8)' : 'none' }}
+          />
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-            <span style={{ color: TEXT, fontSize: 14, fontWeight: 800 }}>{provider}</span>
-            <span style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 5, color: BLUE, fontSize: 10, fontWeight: 800, padding: '2px 6px' }}>+{reward} CIPHER</span>
-          </div>
-          <div style={{ color: TEXT_DIM, fontSize: 12, marginTop: 2 }}>
-            {atLimit ? `${dailyLimit}/${dailyLimit} — come back tomorrow` : `${count}/${dailyLimit} today`}
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, lineHeight: 1.3, marginBottom: 2 }}>Sponsored by</div>
+          <div style={{ color: TEXT, fontSize: 15, lineHeight: 1.2, fontWeight: 800 }}>{provider}</div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 2 }}>AD LIMIT</div>
+          <div style={{ color: done ? 'rgba(239,68,68,0.85)' : 'rgba(255,255,255,0.75)', fontSize: 15, fontWeight: 800 }}>
+            {status?.watched ?? 0}<span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 500 }}>/{dailyLimit}</span>
           </div>
         </div>
-        <button onClick={handleWatch} disabled={busy || atLimit} style={{
-          flexShrink: 0,
-          background: atLimit ? 'rgba(255,255,255,0.06)' : busy ? 'rgba(255,255,255,0.06)' : `linear-gradient(135deg, ${BLUE_D}, ${BLUE})`,
-          color: atLimit ? 'rgba(255,255,255,0.3)' : busy ? 'rgba(255,255,255,0.4)' : '#fff',
-          border: 'none', borderRadius: 10, padding: '9px 16px', fontSize: 12, fontWeight: 800,
-          cursor: busy || atLimit ? 'not-allowed' : 'pointer',
-          boxShadow: busy || atLimit ? 'none' : '0 2px 12px rgba(37,99,235,0.4)',
-          display: 'flex', alignItems: 'center', gap: 5, letterSpacing: '0.03em',
-        }} className={busy || atLimit ? '' : 'active:scale-95 transition-transform'}>
-          {state === 'loading' && <span style={{ width: 11, height: 11, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
-          {btnLabel}
+      </div>
+
+      <div style={{ padding: '0 12px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 3 }}>REWARD</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#0a0a0a', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img src="/cipher-icon.png" alt="CIPHER" style={{ width: '90%', height: '90%', objectFit: 'contain' }} />
+            </div>
+            <span style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>
+              {reward.toLocaleString()}
+              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 600, marginLeft: 3 }}>CIPHER</span>
+            </span>
+          </div>
+        </div>
+
+        <button
+          onClick={handleWatch}
+          disabled={busy || done}
+          data-testid={`button-watch-${provider.toLowerCase()}`}
+          style={{
+            padding: '9px 16px', borderRadius: 12, minWidth: 108, height: 42,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            fontSize: 12, fontWeight: 700, border: 'none', cursor: busy || done ? 'default' : 'pointer',
+            letterSpacing: '0.02em', whiteSpace: 'nowrap',
+            background: done || busy ? 'rgba(255,255,255,0.06)' : '#3b82f6',
+            color: done || busy ? 'rgba(255,255,255,0.3)' : '#fff',
+          }}
+          className="active:scale-95 transition-transform disabled:active:scale-100"
+        >
+          {busy
+            ? <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin .7s linear infinite' }} />
+            : done ? <Check size={13} /> : <Play size={12} fill="currentColor" />}
+          {busy ? 'Loading' : done ? 'Limit Reached' : 'Watch Ad'}
         </button>
       </div>
-      {!isLast && <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '0 16px' }} />}
-    </>
+    </div>
   );
 }
 
@@ -694,6 +745,11 @@ export default function Earn() {
   const [, setLocation] = useLocation();
 
   const { data: user } = useQuery<any>({ queryKey: ['/api/auth/user'], staleTime: 0 });
+  const { data: providerStatusData } = useQuery<{ providers: ProviderStatusMap }>({
+    queryKey: providerStatusKey,
+    staleTime: 0,
+    refetchInterval: 30000,
+  });
   const { data: bountyTasksRaw } = useQuery<any>({ queryKey: ['/api/bounty-tasks'], staleTime: 30000 });
   const bountyTasks: any[] = Array.isArray(bountyTasksRaw) ? bountyTasksRaw : (bountyTasksRaw?.tasks ?? []);
   const { data: userTasks = [] } = useQuery<any[]>({ queryKey: ['/api/user-tasks'], staleTime: 30000 });
@@ -792,9 +848,18 @@ export default function Earn() {
 
           {/* Earn with Ads — always at top */}
           <SectionLabel title="Earn with Ads" />
-          <div style={{ background: CARD, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
             {AD_TASKS.map((t, i) => (
-              <AdRow key={t.id} slotId={t.id} provider={t.provider} desc={t.desc} reward={t.reward} dailyLimit={t.dailyLimit} isLast={i === AD_TASKS.length - 1} />
+              <AdProviderRow
+                key={t.provider}
+                slotId={t.slotId}
+                provider={t.provider}
+                statusKey={t.statusKey}
+                reward={providerStatusData?.providers?.[t.statusKey]?.reward ?? t.reward}
+                dailyLimit={providerStatusData?.providers?.[t.statusKey]?.dailyLimit ?? t.dailyLimit}
+                status={providerStatusData?.providers?.[t.statusKey]}
+                isLast={i === AD_TASKS.length - 1}
+              />
             ))}
           </div>
 
