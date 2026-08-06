@@ -5,7 +5,6 @@ import { apiRequest } from "@/lib/queryClient";
 import Header from "@/components/Header";
 import MenuPopup from "@/components/MenuPopup";
 import { MACHINE_TYPES, type MachineType } from "../../../shared/machineTypes";
-import { CUT_LG, CUT_SM, CORNER_ACCENTS_LG, cornerAccentStyle, outerBorderStyle, centeredOverlayStyle, backdropStyle } from "@/lib/cutCorner";
 
 function fmtNum(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2).replace(/\.00$/, "") + "M";
@@ -28,7 +27,7 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
         onClick={() => !isMaxLevel && onBuy(machine)}
         style={{
           position: "relative", width: "100%", aspectRatio: "1 / 1",
-          clipPath: CUT_SM, overflow: "hidden", border: "1px solid rgba(0,200,255,0.35)", padding: 0,
+          borderRadius: 16, overflow: "hidden", border: "none", padding: 0,
           background: "#16181d", cursor: isMaxLevel ? "not-allowed" : "pointer", display: "block",
           opacity: isMaxLevel ? 0.62 : 1,
         }}
@@ -124,19 +123,17 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
   const canAfford = cipherBalance >= machine.priceCipher;
 
   return (
-    <div style={centeredOverlayStyle()}>
-      <div style={backdropStyle()} onClick={onCancel} />
-      <div style={outerBorderStyle(390)}>
-      <div
-        onClick={event => event.stopPropagation()}
-        style={{
-          position: "relative", background: "#0d0d0f", clipPath: CUT_LG,
-          width: "100%", padding: "24px 20px 22px", maxHeight: "86vh", overflowY: "auto",
-        }}
-      >
-        {CORNER_ACCENTS_LG.map((s, i) => (
-          <div key={i} style={{ ...cornerAccentStyle, ...s }} />
-        ))}
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        background: "#0d0d0f", borderRadius: "18px 18px 0 0",
+        border: "1px solid rgba(255,255,255,0.08)",
+        width: "100%", maxWidth: 480, padding: "24px 20px 32px",
+      }}>
+        <div style={{ width: 36, height: 4, background: "rgba(255,255,255,0.15)", borderRadius: 2, margin: "0 auto 20px" }} />
 
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: "#fff", marginBottom: 6 }}>Confirm Purchase</div>
@@ -209,7 +206,6 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
             {loading ? "Buying…" : "Confirm Purchase"}
           </button>
         </div>
-      </div>
       </div>
     </div>
   );
