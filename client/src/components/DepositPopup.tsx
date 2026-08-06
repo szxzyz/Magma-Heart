@@ -1,24 +1,12 @@
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { CheckCircle2, Copy, Loader2, WalletCards, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiRequest } from "@/lib/queryClient";
+import PopupShell from "@/components/PopupShell";
 
 const TREASURY = "UQDeroBz4zvOntJ4xuMdiwFtNddMhJ4cGxghF9B7fYz50q8b";
 const CIPHER_PER_GRAM = 100_000;
-
-const CUT_LG = 'polygon(14px 0%,calc(100% - 14px) 0%,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0% calc(100% - 14px),0% 14px)';
-
-const CORNER_ACCENTS = [
-  { top:'2px',    left:'14px',  width:'30px', height:'1.5px' },
-  { top:'14px',   left:'2px',   width:'1.5px',height:'30px'  },
-  { top:'2px',    right:'14px', width:'30px', height:'1.5px' },
-  { top:'14px',   right:'2px',  width:'1.5px',height:'30px'  },
-  { bottom:'2px', left:'14px',  width:'30px', height:'1.5px' },
-  { bottom:'14px',left:'2px',   width:'1.5px',height:'30px'  },
-  { bottom:'2px', right:'14px', width:'30px', height:'1.5px' },
-  { bottom:'14px',right:'2px',  width:'1.5px',height:'30px'  },
-] as CSSProperties[];
 
 type Props = { onClose: () => void };
 type Status = "idle" | "sending" | "verifying" | "manualVerifying" | "success" | "error";
@@ -118,35 +106,13 @@ export default function DepositPopup({ onClose }: Props) {
     : "0";
 
   return (
-    <div
-      onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}
-    >
+    <PopupShell onClose={onClose} maxWidth={390} closeOnBackdrop={!busy}>
       <div
-        onClick={onClose}
-        style={{
-          position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)",
-          backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
-        }}
-      />
-      <div
-        style={{
-          clipPath: CUT_LG, padding: "1.5px", background: "rgba(255,255,255,0.08)",
-          boxShadow: "0 20px 70px rgba(0,0,0,0.55)", width: "100%", maxWidth: 390,
-        }}
-      >
-      <div
-        onClick={event => event.stopPropagation()}
         style={{
           position: "relative", width: "100%", maxHeight: "86vh",
-          overflowY: "auto", background: "#0d0d0d", clipPath: CUT_LG,
-          padding: "22px 18px 18px",
+          overflowY: "visible", background: "transparent",
         }}
       >
-        {CORNER_ACCENTS.map((s, i) => (
-          <div key={i} style={{ position: "absolute", pointerEvents: "none", ...s, background: "rgba(0,200,255,0.75)", zIndex: 10 }} />
-        ))}
-
         <div style={{ color: "#fff", fontSize: 18, fontWeight: 900, letterSpacing: "0.02em" }}>
           <span>BUY</span> <span style={{ color: "#3b82f6" }}>CIPHER</span>
         </div>
@@ -250,7 +216,6 @@ export default function DepositPopup({ onClose }: Props) {
         </div>
         <style>{`@keyframes deposit-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
-      </div>
-    </div>
+    </PopupShell>
   );
 }

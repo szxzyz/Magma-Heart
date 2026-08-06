@@ -4,7 +4,7 @@ import { Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { useTonConnectUI, useTonAddress, TonConnectButton } from "@tonconnect/ui-react";
 import { showNotification } from "@/components/AppNotification";
 import { apiRequest } from "@/lib/queryClient";
-import { CUT_LG, CORNER_ACCENTS_LG, cornerAccentStyle, outerBorderStyle, centeredOverlayStyle, backdropStyle } from "@/lib/cutCorner";
+import PopupShell from "@/components/PopupShell";
 
 const TREASURY = 'UQDeroBz4zvOntJ4xuMdiwFtNddMhJ4cGxghF9B7fYz50q8b';
 const MIN_AXN = 1000;
@@ -110,25 +110,18 @@ export default function WithdrawPopup({ onClose, userBalance }: Props) {
   const canSubmit    = !!connectedAddress && amtNum >= MIN_AXN && amtNum <= userBalance && !isProcessing;
 
   return (
-    <div style={centeredOverlayStyle()} onClick={onClose}>
+    <PopupShell onClose={onClose} maxWidth={420}>
       <style>{`
         @keyframes wd-spin { to { transform: rotate(360deg); } }
       `}</style>
-
-      <div style={backdropStyle()} />
-
-      <div style={outerBorderStyle(420)}>
       <div
         style={{
           position: 'relative', width: '100%',
-          background: '#0a0a0a', clipPath: CUT_LG,
+          background: 'transparent', clipPath: 'none',
           padding: '20px 16px max(20px, calc(env(safe-area-inset-bottom,0px) + 12px))',
-          maxHeight: '86vh', overflowY: 'auto',
+          maxHeight: '86vh', overflowY: 'visible',
         }}
-        onClick={e => e.stopPropagation()}
       >
-        {CORNER_ACCENTS_LG.map((s, i) => (<div key={i} style={{ ...cornerAccentStyle, ...s }} />))}
-
         {/* Title */}
         <div style={{ color: '#fff', fontSize: 18, fontWeight: 800, marginBottom: 20 }}>Withdraw AXN</div>
 
@@ -246,8 +239,7 @@ export default function WithdrawPopup({ onClose, userBalance }: Props) {
           </>
         )}
       </div>
-      </div>
-    </div>
+    </PopupShell>
   );
 }
 
