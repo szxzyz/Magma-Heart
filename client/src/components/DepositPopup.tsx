@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { CheckCircle2, Copy, Loader2, WalletCards, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
@@ -6,6 +6,19 @@ import { apiRequest } from "@/lib/queryClient";
 
 const TREASURY = "UQDeroBz4zvOntJ4xuMdiwFtNddMhJ4cGxghF9B7fYz50q8b";
 const CIPHER_PER_GRAM = 100_000;
+
+const CUT_LG = 'polygon(14px 0%,calc(100% - 14px) 0%,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0% calc(100% - 14px),0% 14px)';
+
+const CORNER_ACCENTS = [
+  { top:'2px',    left:'14px',  width:'30px', height:'1.5px' },
+  { top:'14px',   left:'2px',   width:'1.5px',height:'30px'  },
+  { top:'2px',    right:'14px', width:'30px', height:'1.5px' },
+  { top:'14px',   right:'2px',  width:'1.5px',height:'30px'  },
+  { bottom:'2px', left:'14px',  width:'30px', height:'1.5px' },
+  { bottom:'14px',left:'2px',   width:'1.5px',height:'30px'  },
+  { bottom:'2px', right:'14px', width:'30px', height:'1.5px' },
+  { bottom:'14px',right:'2px',  width:'1.5px',height:'30px'  },
+] as CSSProperties[];
 
 type Props = { onClose: () => void };
 type Status = "idle" | "sending" | "verifying" | "manualVerifying" | "success" | "error";
@@ -111,20 +124,22 @@ export default function DepositPopup({ onClose }: Props) {
     >
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.78)", backdropFilter: "blur(8px)" }} />
       <div
-        onClick={event => event.stopPropagation()}
         style={{
-          position: "relative", width: "100%", maxWidth: 390, maxHeight: "86vh",
-          overflowY: "auto", background: "#0d0d0d", borderRadius: 20,
-          padding: "22px 18px 18px", boxShadow: "0 20px 70px rgba(0,0,0,0.55)",
+          clipPath: CUT_LG, padding: "1.5px", background: "rgba(255,255,255,0.08)",
+          boxShadow: "0 20px 70px rgba(0,0,0,0.55)", width: "100%", maxWidth: 390,
         }}
       >
-        <button
-          aria-label="Close"
-          onClick={onClose}
-          style={{ position: "absolute", top: 12, right: 13, border: "none", background: "none", color: "rgba(255,255,255,0.4)", fontSize: 22, cursor: "pointer" }}
-        >
-          ×
-        </button>
+      <div
+        onClick={event => event.stopPropagation()}
+        style={{
+          position: "relative", width: "100%", maxHeight: "86vh",
+          overflowY: "auto", background: "#0d0d0d", clipPath: CUT_LG,
+          padding: "22px 18px 18px",
+        }}
+      >
+        {CORNER_ACCENTS.map((s, i) => (
+          <div key={i} style={{ position: "absolute", pointerEvents: "none", ...s, background: "rgba(0,200,255,0.75)", zIndex: 10 }} />
+        ))}
 
         <div style={{ color: "#fff", fontSize: 18, fontWeight: 900, letterSpacing: "0.02em" }}>
           <span>BUY</span> <span style={{ color: "#3b82f6" }}>CIPHER</span>
@@ -228,6 +243,7 @@ export default function DepositPopup({ onClose }: Props) {
           Manual transfers are credited only when the sender and exact amount match this connected wallet.
         </div>
         <style>{`@keyframes deposit-spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
       </div>
     </div>
   );
