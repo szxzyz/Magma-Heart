@@ -24,7 +24,7 @@ Axionet is a Telegram-based CIPHER earning platform. Users earn CIPHER by watchi
 - **Currency**: Two currencies — CIPHER (earning currency, `balance` field) and AXN (wallet/withdrawal currency, `wallet_balance` field). No BTC, SAT, Satoshi, or Lightning Sats references anywhere in the UI.
 - **Branding**: App uses AXN logo (public/axn-logo.svg) — futuristic, no text, no Bitcoin symbol. Loading screen shows only the logo + bouncing dots, no app name text.
 - **Notification UI**: Black background (#0a0a0a), silver/light gray text (#c8c8c8), colored accent border per type.
-- **Referral System**: Users invite friends and earn CIPHER from their activity. No mining speed boost — referral boost system is removed. Invite popup accessible via header button.
+- **Referral System**: Users invite friends and receive 1,000 CIPHER when a referred friend cumulatively collects 100 AXN, plus a 5% commission on referred-friend TON deposits after conversion to CIPHER. Both rewards are automatic and idempotent; there is no mining speed boost or manual claim flow.
 - **Withdrawal System**: Direct AXN withdrawals. Minimum 20 AXN, with configurable fee. Balance deducted from `balance` field on admin approval. Admin can approve/reject with automatic balance deduction/refund.
 - **ArcPay Integration**: Full integration for PDZ top-ups, including secure API credential handling, retry logic, and a webhook for payment notifications.
 - **Earning Mechanics**:
@@ -34,7 +34,7 @@ Axionet is a Telegram-based CIPHER earning platform. Users earn CIPHER by watchi
   - **Daily Check-in (Games page)**: +5 CIPHER per day, requires watching a rewarded ad
   - **Mystery Box (Games page)**: Win 1–100 CIPHER daily, requires watching a rewarded ad
   - **Promo Codes (Games page)**: Admin issues promo codes, users redeem for bonus CIPHER
-  - **Referral (Friend page)**: Invite friends, earn CIPHER from their activity
+  - **Referral (Friend page)**: Invite friends, receive automatic milestone and deposit rewards
 - **Data Persistence**: Employs a dual storage strategy (IndexedDB primary, localStorage fallback) with a custom `PersistentStorage` class for robust data saving, auto-sync, and fallback handling.
 - **Mandatory Channel & Group Join Security**: Locks app access until users join specified Telegram channel and group, verified in real-time on every app launch.
 - **Ad Watch System**: Three providers — Monetag (50/day), Adgram (10/day), Gigapub (30/day). Each gives +10 CIPHER. Daily limits reset at UTC midnight, tracked via `ad_slot_cooldowns` table and localStorage.
@@ -99,13 +99,17 @@ Axionet is a Telegram-based CIPHER earning platform. Users earn CIPHER by watchi
   - REJECTION: Automatically refunds the balance that was deducted at request time
 - **Files modified**: `server/routes.ts` (removed balance deduction from request creation), `server/storage.ts` (approveWithdrawal and rejectWithdrawal now handle both new and legacy flows)
 
+### August 2026 - Automatic Referral Rewards
+- Replaced the old ad/withdrawal referral reward model with a 1,000 CIPHER reward when a referred friend cumulatively collects 100 AXN.
+- Added a 5% deposit commission based on the referred friend's TON deposit converted at 100,000 CIPHER per TON.
+- Invite & Earn now shows Friends Invited, Commission Earned (CIPHER), reward rules, and the Top 10 active NFT holders leaderboard.
+
 ### December 2024 - Telegram Bot Notification Fixes
 - **Referral Notification**: Only ONE message sent on FIRST AD with  reward from Admin Settings (uses `firstAdWatched` flag to prevent duplicate notifications)
-- **Commission Notification Removed**: Disabled spam notification on every ad watch - referral commission is still awarded but no Telegram notification is sent
+- **Commission Notification Removed**: Disabled spam notification on every ad watch.
 - **Ban Message Fix**: Telegram bot ban message uses inline button "Contact Support" pointing to https://t.me/PaidAdzGroup (no plain text URL)
 - **BanScreen Component**: Updated to redirect to https://t.me/PaidAdzGroup instead of PaidAdsCommunity
 - **Payout Approved Message**: Uses "Share in Group" inline button pointing to https://t.me/PaidAdzGroup
-- **Affiliate Page  Balance**: Calculates totalUsdEarned as successfulInvitesCount * referralReward from admin settings (accurate real-time calculation)
 - **Group Notification for Withdrawals**: Sends notification to PaidAdzGroup (chat ID: -1003402950172) with exact same format as admin notification when withdrawal request is created
 
 ### December 2024 - Country Blocking System Fix
