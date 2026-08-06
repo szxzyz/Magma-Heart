@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, Clipboard, Loader2, WalletCards, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, Loader2, WalletCards, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTonAddress, useTonConnectUI } from "@tonconnect/ui-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -129,33 +129,38 @@ export default function DepositPopup({ onClose }: Props) {
         <div style={{ color: "#fff", fontSize: 18, fontWeight: 900, letterSpacing: "0.02em" }}>BUY CIPHER</div>
         <div style={{ color: "#60a5fa", fontSize: 12, fontWeight: 700, marginTop: 5 }}>1 GRAM = 100,000 CIPHER</div>
 
-        <div
-          style={{
-            marginTop: 15, display: "flex", alignItems: "center", gap: 9,
-            background: connectedAddress ? "rgba(37,99,235,0.16)" : "rgba(255,255,255,0.055)",
-            borderRadius: 14, padding: 12,
-          }}
-        >
-          <WalletCards size={17} color={connectedAddress ? "#60a5fa" : "rgba(255,255,255,0.55)"} />
-          {connectedAddress ? (
-            <>
-              <span style={{ flex: 1, color: "#dbeafe", fontFamily: "monospace", fontSize: 11 }}>
-                {connectedAddress.slice(0, 8)}…{connectedAddress.slice(-6)}
-              </span>
-              <span style={{ color: "#60a5fa", fontSize: 10, fontWeight: 800 }}>Connected</span>
-              <button onClick={() => tonConnectUI.disconnect()} style={{ border: "none", background: "none", color: "rgba(255,255,255,0.42)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                Disconnect
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => tonConnectUI.openModal()}
-              style={{ flex: 1, border: "none", borderRadius: 9, padding: "9px 11px", background: "#2563eb", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer", textAlign: "left" }}
-            >
-              Connect GRAM Wallet
+        {connectedAddress ? (
+          <div
+            style={{
+              marginTop: 15, width: "100%", boxSizing: "border-box",
+              display: "flex", alignItems: "center", gap: 9,
+              background: "rgba(37,99,235,0.16)", borderRadius: 12, padding: "10px 12px",
+            }}
+          >
+            <WalletCards size={17} color="#60a5fa" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0, color: "#dbeafe", fontFamily: "monospace", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {connectedAddress.slice(0, 8)}…{connectedAddress.slice(-6)}
+            </span>
+            <span style={{ color: "#60a5fa", fontSize: 10, fontWeight: 800, flexShrink: 0 }}>Connected</span>
+            <button onClick={() => tonConnectUI.disconnect()} style={{ border: "none", background: "none", padding: 0, color: "rgba(255,255,255,0.42)", fontSize: 10, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+              Disconnect
             </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => tonConnectUI.openModal()}
+            style={{
+              marginTop: 15, width: "100%", boxSizing: "border-box",
+              display: "flex", alignItems: "center", gap: 9,
+              border: "none", borderRadius: 12, padding: "12px 14px",
+              background: "#2563eb", color: "#fff", fontSize: 13,
+              fontWeight: 800, cursor: "pointer", textAlign: "left",
+            }}
+          >
+            <WalletCards size={17} color="#fff" style={{ flexShrink: 0 }} />
+            <span>Connect GRAM Wallet</span>
+          </button>
+        )}
 
         <div style={{ marginTop: 14 }}>
               <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: 700, marginBottom: 7 }}>Amount of CIPHER</div>
@@ -174,8 +179,16 @@ export default function DepositPopup({ onClose }: Props) {
           <div style={{ color: "rgba(255,255,255,0.42)", fontSize: 10, marginBottom: 5 }}>Send GRAM to:</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ flex: 1, color: "#fff", fontFamily: "monospace", fontSize: 10, wordBreak: "break-all" }}>{TREASURY}</span>
-            <button onClick={copyTreasury} aria-label="Copy admin wallet address" style={{ flexShrink: 0, border: "none", background: "rgba(255,255,255,0.08)", color: copied ? "#4ade80" : "#93c5fd", borderRadius: 8, padding: 8, cursor: "pointer" }}>
-              <Clipboard size={14} />
+            <button
+              onClick={copyTreasury}
+              aria-label="Copy admin wallet address"
+              style={{
+                flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                width: 24, height: 24, border: "none", background: "transparent",
+                color: copied ? "#4ade80" : "#93c5fd", padding: 0, cursor: "pointer",
+              }}
+            >
+              <Copy size={16} strokeWidth={2.1} />
             </button>
           </div>
         </div>
