@@ -79,20 +79,20 @@ export default function Friend() {
         </section>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-          <div style={{ background: CARD, borderRadius: 14, padding: "14px 10px", textAlign: "center" }}>
-            <div style={{ color: TEXT, fontSize: 22, fontWeight: 900 }}>{stats?.friendsInvited ?? user?.friendsInvited ?? 0}</div>
-            <div style={{ color: TEXT_DIM, fontSize: 10, marginTop: 5 }}>Friends Invited</div>
+          <div style={{ background: CARD, borderRadius: 12, padding: "9px 8px", minHeight: 54, display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center" }}>
+            <div style={{ color: TEXT, fontSize: 19, fontWeight: 900, lineHeight: 1 }}>{stats?.friendsInvited ?? user?.friendsInvited ?? 0}</div>
+            <div style={{ color: TEXT_DIM, fontSize: 9, marginTop: 4 }}>Friends Invited</div>
           </div>
-          <div style={{ background: CARD, borderRadius: 14, padding: "14px 10px", textAlign: "center" }}>
-            <div style={{ color: "#4ade80", fontSize: 22, fontWeight: 900 }}>{Math.floor(stats?.commissionEarned ?? 0).toLocaleString()}</div>
-            <div style={{ color: TEXT_DIM, fontSize: 10, marginTop: 5 }}>Commission Earned (CIPHER)</div>
+          <div style={{ background: CARD, borderRadius: 12, padding: "9px 8px", minHeight: 54, display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center" }}>
+            <div style={{ color: "#4ade80", fontSize: 19, fontWeight: 900, lineHeight: 1 }}>{Math.floor(stats?.commissionEarned ?? 0).toLocaleString()}</div>
+            <div style={{ color: TEXT_DIM, fontSize: 9, marginTop: 4 }}>Commission Earned (CIPHER)</div>
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, marginBottom: 22 }}>
-          <button onClick={copyLink} disabled={!referralLink} style={{ flex: 1, border: "none", borderRadius: 14, padding: "14px 0", color: "#fff", background: "rgba(255,255,255,0.08)", fontWeight: 800, cursor: referralLink ? "pointer" : "not-allowed", opacity: referralLink ? 1 : 0.5 }}>Copy Invite Link</button>
-          <button onClick={shareLink} disabled={!referralLink || isSharing} style={{ flex: 1, border: "none", borderRadius: 14, padding: "14px 0", color: "#fff", background: `linear-gradient(135deg, ${BLUE_D}, ${BLUE})`, fontWeight: 800, cursor: referralLink ? "pointer" : "not-allowed", boxShadow: "0 4px 18px rgba(37,99,235,0.3)", opacity: referralLink ? 1 : 0.5 }}>
-            {isSharing ? "Opening..." : "Share Invite"}
+          <button onClick={copyLink} disabled={!referralLink} style={{ flex: 1, border: "none", borderRadius: 11, padding: "10px 0", color: "#fff", background: "rgba(255,255,255,0.08)", fontSize: 12, fontWeight: 800, cursor: referralLink ? "pointer" : "not-allowed", opacity: referralLink ? 1 : 0.5 }}>Copy Link</button>
+          <button onClick={shareLink} disabled={!referralLink || isSharing} style={{ flex: 1, border: "none", borderRadius: 11, padding: "10px 0", color: "#fff", background: `linear-gradient(135deg, ${BLUE_D}, ${BLUE})`, fontSize: 12, fontWeight: 800, cursor: referralLink ? "pointer" : "not-allowed", boxShadow: "0 3px 14px rgba(37,99,235,0.28)", opacity: referralLink ? 1 : 0.5 }}>
+            {isSharing ? "Opening..." : "Share"}
           </button>
         </div>
 
@@ -115,9 +115,9 @@ export default function Friend() {
           ) : entries.length === 0 ? (
             <div style={{ background: CARD, borderRadius: 14, padding: "32px 20px", textAlign: "center", color: TEXT_DIM, fontSize: 12 }}>No active NFT holders yet.</div>
           ) : (
-            <div style={{ background: CARD, borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)" }}>
+            <div style={{ display: "grid", gap: 6 }}>
               {entries.map((entry) => (
-                <div key={`${entry.rank}-${entry.username || entry.firstName}`} style={{ display: "grid", gridTemplateColumns: "38px 1fr auto", gap: 10, alignItems: "center", padding: "13px 15px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <div key={`${entry.rank}-${entry.username || entry.firstName}`} style={{ display: "grid", gridTemplateColumns: "38px 1fr auto", gap: 10, alignItems: "center", padding: "12px 14px", borderRadius: 13, background: CARD }}>
                   <div style={{ display: "flex", justifyContent: "center" }}><RankIcon rank={entry.rank} /></div>
                   <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, fontWeight: entry.rank <= 3 ? 800 : 600, color: entry.rank <= 3 ? "#facc15" : TEXT }}>
                     {entry.username ? `@${entry.username}` : entry.firstName}
