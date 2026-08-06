@@ -58,6 +58,8 @@ export default function Games() {
       status: transaction.type || 'completed',
       createdAt: transaction.createdAt,
       kind: 'transaction' as const,
+      source: transaction.source,
+      rewardType: transaction.metadata?.rewardType,
     })),
     ...(transactionData?.withdrawals || []).map((withdrawal: any) => ({
       id: `withdrawal-${withdrawal.id}`,
@@ -66,8 +68,28 @@ export default function Games() {
       status: withdrawal.status || 'pending',
       createdAt: withdrawal.createdAt,
       kind: 'withdrawal' as const,
+      source: 'withdrawal',
+      rewardType: undefined,
     })),
   ].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+  // Sources that credit the CIPHER balance (deposit, ad watch, tasks, daily
+  // rewards / streak, and invite-friends / referral rewards). Everything else
+  // (withdrawals, fees, conversions, NFT activity) is settled in AXN.
+  const CIPHER_SOURCES = new Set([
+    'ad_watch', 'ad_slot_watch',
+    'task_share', 'task_channel', 'task_community', 'task_claim', 'task_completion', 'daily_task_completion',
+    'bonus_claim',
+    'referral', 'referral_milestone', 'referral_deposit_commission', 'referral_backfill', 'invite_friend',
+    'cipher_deposit',
+  ]);
+  const getEntryCurrency = (entry: { kind: 'transaction' | 'withdrawal'; source?: string; rewardType?: string }) => {
+    if (entry.kind === 'withdrawal') return 'AXN';
+    if (entry.rewardType === 'CIPHER') return 'CIPHER';
+    if (entry.rewardType === 'AXN') return 'AXN';
+    if (entry.source && CIPHER_SOURCES.has(entry.source)) return 'CIPHER';
+    return 'AXN';
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -257,7 +279,7 @@ export default function Games() {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ color: isWithdrawal ? '#fff' : '#3b82f6', fontSize: 13, fontWeight: 900 }}>{isWithdrawal ? '-' : '+'}{Number(entry.amount || 0).toLocaleString()} AXN</div>
+                    <div style={{ color: isWithdrawal ? '#fff' : '#3b82f6', fontSize: 13, fontWeight: 900 }}>{isWithdrawal ? '-' : '+'}{Number(entry.amount || 0).toLocaleString()} {getEntryCurrency(entry)}</div>
                     <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 3, textTransform: 'capitalize' }}>{status}</div>
                   </div>
                 </div>
