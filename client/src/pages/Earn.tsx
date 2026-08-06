@@ -870,20 +870,6 @@ export default function Earn() {
               </>
             )}
 
-            {/* Info note */}
-            {selectedTab === 'ads' && (
-              <div style={{ background: 'rgba(37,99,235,0.06)', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={BLUE} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="16" x2="12" y2="12"/>
-                  <line x1="12" y1="8" x2="12.01" y2="8"/>
-                </svg>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, lineHeight: 1.5 }}>
-                  Each CIPHER earned increases your Season Drop chance. Watch more ads to maximize your rewards.
-                </span>
-              </div>
-            )}
-
         </div>
       </div>
 
