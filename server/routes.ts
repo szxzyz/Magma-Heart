@@ -662,6 +662,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/ads/provider-status — provider-level daily counters for the Earn page
+  app.get("/api/ads/provider-status", authenticateTelegram, async (req: any, res) => {
+    try {
+      const user = req.user?.user;
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      const providerConfig: Record<string, { slot: number; reward: number; dailyLimit: number }> = {
+        Monetag: { slot: 1, reward: 500, dailyLimit: 10 },
+        AdsGram: { slot: 2, reward: 700, dailyLimit: 10 },
+        Gigapub: { slot: 3, reward: 500, dailyLimit: 10 },
+      };
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS ad_slot_watches (
+          id SERIAL PRIMARY KEY,
+          user_id VARCHAR NOT NULL,
+          slot INTEGER NOT NULL,
+          watch_date DATE NOT NULL DEFAULT CURRENT_DATE,
+          watch_count INTEGER NOT NULL DEFAULT 1,
+          UNIQUE(user_id, slot, watch_date)
+        )
+      `);
+
+      const todayDate = new Date().toISOString().slice(0, 10);
+      const rows = await db.execute(sql`
+        SELECT slot, watch_count
+        FROM ad_slot_watches
+        WHERE user_id = ${user.id} AND watch_date = ${todayDate}::date
+      `);
+      const counts: Record<number, number> = {};
+      for (const row of rows.rows || []) {
+        counts[Number((row as any).slot)] = Number((row as any).watch_count);
+      }
+
+      const resetAt = new Date();
+      resetAt.setUTCHours(24, 0, 0, 0);
+      const resetMs = Math.max(0, resetAt.getTime() - Date.now());
+      const providers = Object.fromEntries(Object.entries(providerConfig).map(([name, config]) => {
+        const watched = Math.min(counts[config.slot] || 0, config.dailyLimit);
+        return [name, {
+          ...config,
+          watched,
+          remaining: config.dailyLimit - watched,
+          resetAt: resetAt.toISOString(),
+          resetMs,
+        }];
+      }));
+
+      res.json({ providers });
+    } catch (error) {
+      console.error("Provider ad status error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // POST /api/ads/slot-watch — watch ad for a specific slot (daily count-based limit)
   app.post("/api/ads/slot-watch", authenticateTelegram, async (req: any, res) => {
     try {
@@ -670,11 +725,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { slot } = req.body;
       if (!slot || typeof slot !== 'number') return res.status(400).json({ message: "Missing slot" });
 
-      // Per-slot daily limits and rewards (matches frontend AD_TASKS config)
+      // Provider slots use independent 10-ad daily limits.
       const AD_SLOT_CONFIG: Record<number, { reward: number; dailyLimit: number }> = {
-        1: { reward: 10, dailyLimit: 50 },
-        2: { reward: 10, dailyLimit: 10 },
-        3: { reward: 10, dailyLimit: 30 },
+        1: { reward: 500, dailyLimit: 10 },
+        2: { reward: 700, dailyLimit: 10 },
+        3: { reward: 500, dailyLimit: 10 },
       };
       const config = AD_SLOT_CONFIG[slot];
       if (!config) return res.status(400).json({ message: "Invalid ad slot" });
@@ -8473,7 +8528,7 @@ ${walletAddress}
         .where(eq(users.id, userId));
       const axnTask = userData?.axnNameRewardClaimed ? 0 : 1;
 
-      // 2. Ad slot tasks (3 slots: Monetag, Adgram, Gigapub — daily cooldown resets at UTC midnight)
+      // 2. Ad slot tasks (3 slots: Monetag, AdsGram, Gigapub — daily cooldown resets at UTC midnight)
       let adTasks = 3;
       try {
         // Ensure table exists first
