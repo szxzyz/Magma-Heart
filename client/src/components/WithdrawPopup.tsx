@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
-import { CheckCircle2, XCircle, Loader2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { useTonConnectUI, useTonAddress, TonConnectButton } from "@tonconnect/ui-react";
 import { showNotification } from "@/components/AppNotification";
 import { apiRequest } from "@/lib/queryClient";
@@ -27,7 +26,6 @@ interface Props { onClose: () => void; userBalance: number; isAdmin?: boolean; }
 export default function WithdrawPopup({ onClose, userBalance }: Props) {
   const [tonConnectUI] = useTonConnectUI();
   const connectedAddress = useTonAddress();
-  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
   const [amount, setAmount] = useState('');
@@ -111,35 +109,6 @@ export default function WithdrawPopup({ onClose, userBalance }: Props) {
             <Row label="Withdrawal fee" value="10%" sub="Deducted from every withdrawal" />
           </div>
 
-          {/* Daily ads requirement */}
-          {!eligibilityLoading && !adsOk && (
-            <div style={{
-              display: 'flex', alignItems: 'flex-start', gap: 10,
-              background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)',
-              borderRadius: 14, padding: '12px 14px', marginBottom: 14,
-            }}>
-              <AlertTriangle size={17} color="#fbbf24" style={{ flexShrink: 0, marginTop: 1 }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ color: '#fbbf24', fontSize: 12.5, fontWeight: 800, marginBottom: 3 }}>
-                  Complete today's ads to unlock withdrawals
-                </div>
-                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11.5, lineHeight: 1.5, marginBottom: 8 }}>
-                  {eligibility?.adsCompletedToday ?? 0}/{eligibility?.adsRequiredToday ?? 30} daily ads completed today.
-                </div>
-                <button
-                  onClick={() => { onClose(); setLocation('/earn'); }}
-                  style={{
-                    border: 'none', borderRadius: 10, padding: '7px 14px',
-                    background: 'linear-gradient(135deg, #d97706, #f59e0b)',
-                    color: '#fff', fontSize: 11.5, fontWeight: 800, cursor: 'pointer',
-                  }}
-                >
-                  Go watch ads
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* One request per day */}
           {!eligibilityLoading && adsOk && alreadyWithdrawnToday && (
             <div style={{
@@ -201,7 +170,7 @@ export default function WithdrawPopup({ onClose, userBalance }: Props) {
                 MAX
               </button>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 14, display: 'flex', alignItems: 'center', padding: '0 16px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 12, display: 'flex', alignItems: 'center', padding: '0 14px' }}>
               <input
                 type="number"
                 value={amount}
@@ -209,8 +178,8 @@ export default function WithdrawPopup({ onClose, userBalance }: Props) {
                 placeholder="Enter AXN amount"
                 disabled={isProcessing}
                 style={{
-                  flex: 1, padding: '14px 0', background: 'none', border: 'none', outline: 'none',
-                  color: '#fff', fontSize: 16, fontWeight: 700,
+                  flex: 1, padding: '13px 0', background: 'none', border: 'none', outline: 'none',
+                  color: '#fff', fontSize: 13,
                 }}
               />
               <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, fontWeight: 700 }}>AXN</span>
@@ -248,7 +217,11 @@ export default function WithdrawPopup({ onClose, userBalance }: Props) {
             } as React.CSSProperties}
           >
             {isProcessing && <Loader2 size={15} style={{ animation: 'wd-spin 1s linear infinite' }} />}
-            {isProcessing ? 'Submitting…' : 'Submit Withdrawal Request'}
+            {isProcessing
+              ? 'Submitting…'
+              : !eligibilityLoading && !adsOk
+                ? `Complete ${eligibility?.adsRequiredToday ?? 30} ads`
+                : 'Submit Withdrawal Request'}
           </button>
           <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10.5, textAlign: 'center', lineHeight: 1.5, marginTop: 10 }}>
             Requests are reviewed and sent manually by the admin. You'll be notified once it's approved.
