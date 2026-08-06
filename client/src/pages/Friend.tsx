@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { FaCrown, FaMedal, FaAward, FaTrophy } from "react-icons/fa";
 import Header from "@/components/Header";
 import MenuPopup from "@/components/MenuPopup";
+import RewardsInfoPopup from "@/components/RewardsInfoPopup";
 import { showNotification } from "@/components/AppNotification";
 
 const CARD = "rgba(255,255,255,0.07)";
@@ -29,6 +30,7 @@ function RankIcon({ rank }: { rank: number }) {
 export default function Friend() {
   const [isSharing, setIsSharing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [rewardsOpen, setRewardsOpen] = useState(false);
   const { data: user } = useQuery<any>({ queryKey: ["/api/auth/user"], staleTime: 60000 });
   const { data: botInfo } = useQuery<{ username: string }>({ queryKey: ["/api/bot-info"], staleTime: 3600000 });
   const { data: stats } = useQuery<{ friendsInvited: number; commissionEarned: number }>({
@@ -96,14 +98,9 @@ export default function Friend() {
           </button>
         </div>
 
-        <section style={{ background: CARD, borderRadius: 16, padding: "16px 16px 14px", marginBottom: 20 }}>
-          <div style={{ color: TEXT, fontSize: 15, fontWeight: 900, marginBottom: 14 }}>Reward Information</div>
-          <div style={{ display: "grid", gap: 14, color: TEXT_DIM, fontSize: 12, lineHeight: 1.45 }}>
-            <div><strong style={{ color: BLUE }}>Reward Per Friend</strong><br />You receive <strong style={{ color: TEXT }}>1,000 CIPHER</strong> when your referred friend collects <strong style={{ color: TEXT }}>100 AXN</strong>.</div>
-            <div><strong style={{ color: BLUE }}>Deposit Commission</strong><br /><strong style={{ color: TEXT }}>+5%</strong> from every deposit made by your referred friends.</div>
-            <div><strong style={{ color: BLUE }}>Reward Distribution</strong><br />All referral rewards and deposit commissions are credited automatically. Users do not need to claim them manually.</div>
-          </div>
-        </section>
+        <button onClick={() => setRewardsOpen(true)} style={{ width: "100%", marginBottom: 20, border: "none", borderRadius: 13, padding: "12px 14px", background: CARD, color: TEXT, fontSize: 13, fontWeight: 800, cursor: "pointer", textAlign: "left" }}>
+          Rewards Information
+        </button>
 
         <section>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
@@ -130,6 +127,7 @@ export default function Friend() {
         </section>
       </main>
       {menuOpen && <MenuPopup onClose={() => setMenuOpen(false)} />}
+      {rewardsOpen && <RewardsInfoPopup onClose={() => setRewardsOpen(false)} />}
     </div>
   );
 }
