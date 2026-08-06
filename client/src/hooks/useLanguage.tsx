@@ -65,7 +65,7 @@ const BASE_TRANSLATIONS: Record<string, string> = {
   daily_reward: 'Daily Reward', mining_status: 'Mining Status', rank: 'Rank',
   total_axn: 'Total AXN', total_usd: 'Total USD', mining_power: 'Mining Power',
   earn: 'Earn', referrals: 'Referrals', invite_friends_earn: 'Invite friends and earn',
-  referral_desc_prefix: '10% of their AXN and When your friend buys a plan you get',
+  referral_desc_prefix: 'Earn automatic rewards when your referred friends reach milestones and deposit',
   referral_desc_suffix: 'instantly', user_referred: 'User referred',
   successful: 'Successful', copy_link: 'Copy Link', total_axn_mined: 'Total AXN Mined',
   total_ton_earned: 'Total TON Earned', mined_axn: 'MINED AXN', upgrade: 'UPGRADE',
