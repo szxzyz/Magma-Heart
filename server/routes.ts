@@ -110,6 +110,130 @@ async function creditReferralDepositCommission(
   });
 }
 
+/**
+ * Find and settle one CIPHER deposit intent. This is intentionally shared by
+ * the user status endpoint and the background poller so manual transfers do
+ * not depend on the popup staying open.
+ */
+async function settleCipherDeposit(depositId: string): Promise<{
+  success: boolean;
+  status: 'pending' | 'credited' | 'failed';
+  cipherAmount?: string;
+  paymentHash?: string;
+  message?: string;
+}> {
+  const { pool } = await import('./db');
+  const pendingResult = await pool.query(
+    `SELECT * FROM cipher_deposits WHERE id = $1`,
+    [depositId],
+  );
+  const deposit = pendingResult.rows[0];
+  if (!deposit) return { success: false, status: 'failed', message: 'Deposit request not found' };
+  if (deposit.status === 'credited') {
+    return { success: true, status: 'credited', cipherAmount: String(deposit.cipher_amount), paymentHash: deposit.payment_hash };
+  }
+  if (deposit.status !== 'pending' || new Date(deposit.expires_at).getTime() <= Date.now()) {
+    await pool.query(
+      `UPDATE cipher_deposits SET status = 'failed' WHERE id = $1 AND status = 'pending'`,
+      [deposit.id],
+    );
+    return { success: false, status: 'failed', message: 'Deposit request expired' };
+  }
+
+  const { checkDepositPaymentReceived } = await import('./ton-service');
+  const payment = await checkDepositPaymentReceived(
+    deposit.wallet_address,
+    new Date(deposit.created_at),
+    String(deposit.ton_amount_nano),
+  );
+  if (!payment.found || !payment.txHash) {
+    return { success: false, status: 'pending', message: 'Payment not found yet' };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const lockedResult = await client.query(
+      `SELECT * FROM cipher_deposits WHERE id = $1 FOR UPDATE`,
+      [deposit.id],
+    );
+    const locked = lockedResult.rows[0];
+    if (!locked) {
+      await client.query('ROLLBACK');
+      return { success: false, status: 'failed', message: 'Deposit request not found' };
+    }
+    if (locked.status === 'credited') {
+      await client.query('COMMIT');
+      return { success: true, status: 'credited', cipherAmount: String(locked.cipher_amount), paymentHash: locked.payment_hash };
+    }
+
+    const duplicate = await client.query(
+      `SELECT id FROM cipher_deposits WHERE payment_hash = $1 AND id <> $2 LIMIT 1`,
+      [payment.txHash, locked.id],
+    );
+    if (duplicate.rows.length > 0) {
+      await client.query(
+        `UPDATE cipher_deposits SET status = 'failed' WHERE id = $1 AND status = 'pending'`,
+        [locked.id],
+      );
+      await client.query('COMMIT');
+      return { success: false, status: 'failed', message: 'This blockchain payment has already been credited' };
+    }
+
+    const updatedUser = await client.query(
+      `UPDATE users
+       SET balance = COALESCE(balance::numeric, 0) + $1,
+           total_earned = COALESCE(total_earned::numeric, 0) + $1,
+           total_earnings = COALESCE(total_earnings::numeric, 0) + $1,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING id`,
+      [locked.cipher_amount, locked.user_id],
+    );
+    if (updatedUser.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { success: false, status: 'failed', message: 'User account not found' };
+    }
+
+    await client.query(
+      `INSERT INTO earnings (user_id, amount, source, description)
+       VALUES ($1, $2, 'cipher_deposit', 'CIPHER deposit verified on-chain')`,
+      [locked.user_id, locked.cipher_amount],
+    );
+    await client.query(
+      `INSERT INTO transactions (user_id, amount, type, source, description, metadata)
+       VALUES ($1, $2, 'addition', 'cipher_deposit', 'CIPHER deposit credited',
+               jsonb_build_object('depositId', $3, 'paymentHash', $4, 'tonAmountNano', $5,
+                                   'walletAddress', $6))`,
+      [locked.user_id, locked.cipher_amount, locked.id, payment.txHash, locked.ton_amount_nano, locked.wallet_address],
+    );
+    await client.query(
+      `UPDATE cipher_deposits
+       SET status = 'credited', payment_hash = $1, credited_at = NOW()
+       WHERE id = $2`,
+      [payment.txHash, locked.id],
+    );
+    await client.query('COMMIT');
+
+    await creditReferralDepositCommission(
+      locked.user_id,
+      Number(locked.ton_amount_nano) / 1e9,
+      `cipher_deposit_${locked.id}`,
+    );
+    return {
+      success: true,
+      status: 'credited',
+      cipherAmount: String(locked.cipher_amount),
+      paymentHash: payment.txHash,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 // Function to verify session token against PostgreSQL sessions table
 async function verifySessionToken(sessionToken: string): Promise<{ isValid: boolean; userId?: string }> {
   try {
@@ -5459,9 +5583,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(withdrawals.userId, userId))
         .orderBy(desc(withdrawals.createdAt));
       
+      const depositRows = await db.execute(sql`
+        SELECT id, cipher_amount, status, payment_hash, created_at, credited_at
+        FROM cipher_deposits
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+      `);
+      const deposits = (depositRows.rows || []).map((deposit: any) => ({
+        id: `cipher-${deposit.id}`,
+        amount: deposit.cipher_amount,
+        method: 'CIPHER deposit',
+        status: deposit.status,
+        details: deposit.payment_hash ? `Payment: ${deposit.payment_hash}` : 'Blockchain verification pending',
+        transactionHash: deposit.payment_hash,
+        createdAt: deposit.credited_at || deposit.created_at,
+        currency: 'CIPHER',
+        source: 'cipher_deposit',
+      }));
+
       res.json({ 
         success: true,
-        withdrawals: userWithdrawals 
+        withdrawals: [...userWithdrawals, ...deposits]
       });
       
     } catch (error) {
@@ -8898,94 +9040,34 @@ ${walletAddress}
     }
   });
 
-  app.post('/api/cipher-deposit/verify/:id', authenticateTelegram, async (req: any, res) => {
-    const user = req.user?.user;
-    if (!user) return res.status(401).json({ message: 'Not authenticated' });
-    const { pool } = await import('./db');
-
+  app.get('/api/cipher-deposit/status/:id', authenticateTelegram, async (req: any, res) => {
     try {
-      const purchaseResult = await pool.query(
-        `SELECT * FROM cipher_deposits WHERE id = $1 AND user_id = $2`,
+      const user = req.user?.user;
+      if (!user) return res.status(401).json({ message: 'Not authenticated' });
+      const { pool } = await import('./db');
+      const owned = await pool.query(
+        `SELECT id, user_id FROM cipher_deposits WHERE id = $1 AND user_id = $2`,
         [req.params.id, user.id],
       );
-      const purchase = purchaseResult.rows[0];
-      if (!purchase) return res.status(404).json({ message: 'Purchase request not found' });
-      if (purchase.status === 'credited') {
-        return res.json({ success: true, status: 'credited', cipherAmount: purchase.cipher_amount });
-      }
-      if (purchase.status !== 'pending' || new Date(purchase.expires_at).getTime() <= Date.now()) {
-        await pool.query(
-          `UPDATE cipher_deposits SET status = 'failed' WHERE id = $1 AND status = 'pending'`,
-          [purchase.id],
-        );
-        return res.json({ success: false, status: 'failed', message: 'Purchase request expired' });
-      }
+      if (!owned.rows[0]) return res.status(404).json({ message: 'Deposit request not found' });
+      return res.json(await settleCipherDeposit(req.params.id));
+    } catch (error) {
+      console.error('[CIPHER-DEPOSIT] status error:', error);
+      return res.status(500).json({ message: 'Payment verification failed. No balance was credited.' });
+    }
+  });
 
-      const { checkDepositPaymentReceived } = await import('./ton-service');
-      const payment = await checkDepositPaymentReceived(
-        purchase.wallet_address,
-        new Date(purchase.created_at),
-        String(purchase.ton_amount_nano),
+  app.post('/api/cipher-deposit/verify/:id', authenticateTelegram, async (req: any, res) => {
+    try {
+      const user = req.user?.user;
+      if (!user) return res.status(401).json({ message: 'Not authenticated' });
+      const { pool } = await import('./db');
+      const owned = await pool.query(
+        `SELECT id FROM cipher_deposits WHERE id = $1 AND user_id = $2`,
+        [req.params.id, user.id],
       );
-      if (!payment.found || !payment.txHash) {
-        return res.json({ success: false, status: 'pending', message: 'Payment not found yet' });
-      }
-
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const lockedResult = await client.query(
-          `SELECT * FROM cipher_deposits WHERE id = $1 AND user_id = $2 FOR UPDATE`,
-          [purchase.id, user.id],
-        );
-        const locked = lockedResult.rows[0];
-        if (!locked || locked.status === 'credited') {
-          await client.query('ROLLBACK');
-          return res.json({ success: true, status: 'credited', cipherAmount: locked?.cipher_amount || purchase.cipher_amount });
-        }
-
-        const duplicate = await client.query(
-          `SELECT id FROM cipher_deposits WHERE payment_hash = $1 AND id <> $2 LIMIT 1`,
-          [payment.txHash, purchase.id],
-        );
-        if (duplicate.rows.length > 0) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ message: 'This blockchain payment has already been credited' });
-        }
-
-        await client.query(
-          `UPDATE users
-           SET balance = COALESCE(balance::numeric, 0) + $1,
-               total_earned = COALESCE(total_earned::numeric, 0) + $1,
-               total_earnings = COALESCE(total_earnings::numeric, 0) + $1,
-               updated_at = NOW()
-           WHERE id = $2`,
-          [locked.cipher_amount, user.id],
-        );
-        await client.query(
-          `INSERT INTO earnings (user_id, amount, source, description)
-           VALUES ($1, $2, 'cipher_deposit', 'CIPHER purchase verified on-chain')`,
-          [user.id, locked.cipher_amount],
-        );
-        await client.query(
-          `INSERT INTO transactions (user_id, amount, type, source, description, metadata)
-           VALUES ($1, $2, 'addition', 'cipher_deposit', 'CIPHER purchase credited',
-                   jsonb_build_object('purchaseId', $3, 'paymentHash', $4, 'tonAmountNano', $5))`,
-          [user.id, locked.cipher_amount, locked.id, payment.txHash, locked.ton_amount_nano],
-        );
-        await client.query(
-          `UPDATE cipher_deposits SET status = 'credited', payment_hash = $1, credited_at = NOW()
-           WHERE id = $2`,
-          [payment.txHash, locked.id],
-        );
-        await client.query('COMMIT');
-        return res.json({ success: true, status: 'credited', cipherAmount: locked.cipher_amount, paymentHash: payment.txHash });
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      } finally {
-        client.release();
-      }
+      if (!owned.rows[0]) return res.status(404).json({ message: 'Purchase request not found' });
+      return res.json(await settleCipherDeposit(req.params.id));
     } catch (error) {
       console.error('[CIPHER-DEPOSIT] verify error:', error);
       return res.status(500).json({ message: 'Payment verification failed. No balance was credited.' });
@@ -9266,6 +9348,26 @@ async function startTonPoller() {
 
   async function poll() {
     try {
+      // 0. Settle pending CIPHER deposits independently of the client.
+      // This covers manual transfers and payments made after the popup closes.
+      const pendingCipherDeposits = await pool.query(
+        `SELECT id
+         FROM cipher_deposits
+         WHERE status = 'pending' AND expires_at > NOW()
+         ORDER BY created_at ASC
+         LIMIT 100`,
+      );
+      for (const deposit of pendingCipherDeposits.rows) {
+        try {
+          const result = await settleCipherDeposit(deposit.id);
+          if (result.status === 'credited') {
+            console.log(`[CIPHER-POLLER] ✅ Credited ${result.cipherAmount} CIPHER for deposit ${deposit.id}`);
+          }
+        } catch (error) {
+          console.error(`[CIPHER-POLLER] Failed to settle deposit ${deposit.id}:`, error);
+        }
+      }
+
       // 1. Expire old pending_payment claims and refund
       const expired = await pool.query(
         `UPDATE ton_withdrawals SET status = 'expired', updated_at = NOW()
