@@ -212,6 +212,7 @@ function FarmingCard({
       showNotification(`${machineType.name} rewards claimed! +${data.amount} AXN`, 'success');
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       queryClient.invalidateQueries({ queryKey: ['/api/machines'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
     },
     onError: (err: any) => showNotification(err?.message || 'Failed to claim rewards', 'error'),
   });
@@ -498,6 +499,7 @@ export default function Rewards() {
       showNotification(`Farming rewards claimed! +${data.amount} AXN`, 'success');
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       queryClient.invalidateQueries({ queryKey: ['/api/machines'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
     },
     onError: (err: any) => showNotification(err?.message || 'Failed to claim farming rewards', 'error'),
   });
