@@ -291,6 +291,22 @@ export async function ensureDatabaseSchema(): Promise<void> {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+
+    // CIPHER purchases are credited only after exact on-chain verification.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS cipher_deposits (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL REFERENCES users(id),
+        wallet_address VARCHAR NOT NULL,
+        cipher_amount DECIMAL(30, 0) NOT NULL,
+        ton_amount_nano NUMERIC(40, 0) NOT NULL,
+        payment_hash VARCHAR UNIQUE,
+        status VARCHAR NOT NULL DEFAULT 'pending',
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        credited_at TIMESTAMP
+      )
+    `);
     
     // Withdrawals table
     await db.execute(sql`

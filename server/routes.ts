@@ -8856,6 +8856,142 @@ ${walletAddress}
   });
 
   // ── TON Auto-Withdrawal System ────────────────────────────────────────────
+  // ── CIPHER Deposit / Purchase System ─────────────────────────────────────
+  app.post('/api/cipher-deposit/create', authenticateTelegram, async (req: any, res) => {
+    try {
+      const user = req.user?.user;
+      if (!user) return res.status(401).json({ message: 'Not authenticated' });
+
+      const walletAddress = String(req.body.walletAddress || '').trim();
+      const cipherAmount = String(req.body.cipherAmount || '').trim();
+      if (!walletAddress) return res.status(400).json({ message: 'Connect your wallet first' });
+      if (!/^[0-9]+$/.test(cipherAmount) || BigInt(cipherAmount) <= 0n) {
+        return res.status(400).json({ message: 'Enter a valid CIPHER amount' });
+      }
+      if (BigInt(cipherAmount) > 1_000_000_000_000n) {
+        return res.status(400).json({ message: 'Amount is too large' });
+      }
+
+      // 1 GRAM = 100,000 CIPHER and 1 TON = 1,000,000,000 nanoTON.
+      // This gives an exact integer conversion: 1 CIPHER = 10,000 nanoTON.
+      const tonAmountNano = (BigInt(cipherAmount) * 10_000n).toString();
+      const { pool } = await import('./db');
+      const result = await pool.query(
+        `INSERT INTO cipher_deposits
+          (user_id, wallet_address, cipher_amount, ton_amount_nano, status, expires_at)
+         VALUES ($1, $2, $3, $4, 'pending', NOW() + INTERVAL '30 minutes')
+         RETURNING id, cipher_amount, ton_amount_nano, expires_at`,
+        [user.id, walletAddress, cipherAmount, tonAmountNano],
+      );
+      const purchase = result.rows[0];
+      return res.json({
+        success: true,
+        purchaseId: purchase.id,
+        cipherAmount: purchase.cipher_amount,
+        tonAmountNano: purchase.ton_amount_nano,
+        tonAmount: Number(purchase.ton_amount_nano) / 1e9,
+        expiresAt: purchase.expires_at,
+      });
+    } catch (error) {
+      console.error('[CIPHER-DEPOSIT] create error:', error);
+      return res.status(500).json({ message: 'Could not create purchase request' });
+    }
+  });
+
+  app.post('/api/cipher-deposit/verify/:id', authenticateTelegram, async (req: any, res) => {
+    const user = req.user?.user;
+    if (!user) return res.status(401).json({ message: 'Not authenticated' });
+    const { pool } = await import('./db');
+
+    try {
+      const purchaseResult = await pool.query(
+        `SELECT * FROM cipher_deposits WHERE id = $1 AND user_id = $2`,
+        [req.params.id, user.id],
+      );
+      const purchase = purchaseResult.rows[0];
+      if (!purchase) return res.status(404).json({ message: 'Purchase request not found' });
+      if (purchase.status === 'credited') {
+        return res.json({ success: true, status: 'credited', cipherAmount: purchase.cipher_amount });
+      }
+      if (purchase.status !== 'pending' || new Date(purchase.expires_at).getTime() <= Date.now()) {
+        await pool.query(
+          `UPDATE cipher_deposits SET status = 'failed' WHERE id = $1 AND status = 'pending'`,
+          [purchase.id],
+        );
+        return res.json({ success: false, status: 'failed', message: 'Purchase request expired' });
+      }
+
+      const { checkDepositPaymentReceived } = await import('./ton-service');
+      const payment = await checkDepositPaymentReceived(
+        purchase.wallet_address,
+        new Date(purchase.created_at),
+        String(purchase.ton_amount_nano),
+      );
+      if (!payment.found || !payment.txHash) {
+        return res.json({ success: false, status: 'pending', message: 'Payment not found yet' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const lockedResult = await client.query(
+          `SELECT * FROM cipher_deposits WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+          [purchase.id, user.id],
+        );
+        const locked = lockedResult.rows[0];
+        if (!locked || locked.status === 'credited') {
+          await client.query('ROLLBACK');
+          return res.json({ success: true, status: 'credited', cipherAmount: locked?.cipher_amount || purchase.cipher_amount });
+        }
+
+        const duplicate = await client.query(
+          `SELECT id FROM cipher_deposits WHERE payment_hash = $1 AND id <> $2 LIMIT 1`,
+          [payment.txHash, purchase.id],
+        );
+        if (duplicate.rows.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ message: 'This blockchain payment has already been credited' });
+        }
+
+        await client.query(
+          `UPDATE users
+           SET balance = COALESCE(balance::numeric, 0) + $1,
+               total_earned = COALESCE(total_earned::numeric, 0) + $1,
+               total_earnings = COALESCE(total_earnings::numeric, 0) + $1,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [locked.cipher_amount, user.id],
+        );
+        await client.query(
+          `INSERT INTO earnings (user_id, amount, source, description)
+           VALUES ($1, $2, 'cipher_deposit', 'CIPHER purchase verified on-chain')`,
+          [user.id, locked.cipher_amount],
+        );
+        await client.query(
+          `INSERT INTO transactions (user_id, amount, type, source, description, metadata)
+           VALUES ($1, $2, 'addition', 'cipher_deposit', 'CIPHER purchase credited',
+                   jsonb_build_object('purchaseId', $3, 'paymentHash', $4, 'tonAmountNano', $5))`,
+          [user.id, locked.cipher_amount, locked.id, payment.txHash, locked.ton_amount_nano],
+        );
+        await client.query(
+          `UPDATE cipher_deposits SET status = 'credited', payment_hash = $1, credited_at = NOW()
+           WHERE id = $2`,
+          [payment.txHash, locked.id],
+        );
+        await client.query('COMMIT');
+        return res.json({ success: true, status: 'credited', cipherAmount: locked.cipher_amount, paymentHash: payment.txHash });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('[CIPHER-DEPOSIT] verify error:', error);
+      return res.status(500).json({ message: 'Payment verification failed. No balance was credited.' });
+    }
+  });
+
   // Create table on first run
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS ton_withdrawals (

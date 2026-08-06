@@ -163,6 +163,59 @@ export async function checkPaymentReceived(
   }
 }
 
+// Exact TON deposit verification for CIPHER purchases. Unlike withdrawal-fee
+// detection above, this requires the exact nanoTON amount and sender wallet.
+export async function checkDepositPaymentReceived(
+  userWalletAddress: string,
+  createdAt: Date,
+  expectedNano: string,
+): Promise<{ found: boolean; txHash?: string }> {
+  const userForms = getAllAddressForms(userWalletAddress);
+  const claimTs = Math.floor(createdAt.getTime() / 1000) - 120;
+  const expected = BigInt(expectedNano);
+  const treasuryRaw = Address.parse(TREASURY_ADDRESS).toRawString();
+
+  try {
+    const apiKey = process.env.TONCENTER_API_KEY;
+    const keyParam = apiKey ? `&api_key=${apiKey}` : '';
+    const treasuryAddr = Address.parse(TREASURY_ADDRESS);
+    const url = `https://toncenter.com/api/v2/getTransactions?address=${treasuryAddr.toString()}&limit=100&archival=false${keyParam}`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      for (const tx of (data.result || [])) {
+        if (!tx.in_msg?.source || (tx.utime || 0) < claimTs) continue;
+        const senderForms = getAllAddressForms(tx.in_msg.source);
+        if (!userForms.some(u => senderForms.includes(u))) continue;
+        if (BigInt(tx.in_msg.value || 0) !== expected) continue;
+        return { found: true, txHash: tx.transaction_id?.hash || tx.hash || `toncenter_${tx.utime}` };
+      }
+    }
+  } catch (error) {
+    console.warn('[TON] Exact deposit TONCenter lookup failed:', error);
+  }
+
+  try {
+    const url = `${TONAPI}/blockchain/accounts/${treasuryRaw}/transactions?limit=100`;
+    const resp = await fetch(url, { headers: tonapiHeaders(), signal: AbortSignal.timeout(12000) });
+    if (!resp.ok) return { found: false };
+    const data = await resp.json();
+    for (const tx of (data.transactions || [])) {
+      if ((tx.utime || 0) < claimTs) continue;
+      const inMsg = tx.in_msg;
+      if (!inMsg?.source?.address) continue;
+      const senderForms = getAllAddressForms(inMsg.source.address);
+      if (!userForms.some(u => senderForms.includes(u))) continue;
+      if (BigInt(inMsg.value || 0) !== expected) continue;
+      return { found: true, txHash: tx.hash || `tonapi_${tx.utime}` };
+    }
+  } catch (error) {
+    console.warn('[TON] Exact deposit TonAPI lookup failed:', error);
+  }
+
+  return { found: false };
+}
+
 // ── Wait for tx to land on-chain and return its real hash ────────────────────
 async function waitForTxBySeqno(
   treasuryRaw: string,
