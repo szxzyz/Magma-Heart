@@ -21,6 +21,7 @@ export default function Games() {
   const [showWithdrawPopup, setShowWithdrawPopup] = useState(false);
   const [showPromoPopup, setShowPromoPopup] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'axn' | 'cipher' | 'withdraw' | 'deposit'>('all');
 
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -91,6 +92,29 @@ export default function Games() {
     if (entry.source && CIPHER_SOURCES.has(entry.source)) return 'CIPHER';
     return 'AXN';
   };
+
+  // Assets page tabs — filter the transaction history by type.
+  // ALL: everything. AXN: AXN credits (NFT machine claims / promo etc, not withdrawals).
+  // CIPHER: CIPHER credits only. WITHDRAW: AXN withdrawals. DEPOSIT: CIPHER deposits.
+  const ASSET_TABS: { id: typeof activeTab; label: string }[] = [
+    { id: 'all',      label: 'All' },
+    { id: 'axn',      label: 'AXN' },
+    { id: 'cipher',   label: 'CIPHER' },
+    { id: 'withdraw', label: 'Withdraw' },
+    { id: 'deposit',  label: 'Deposit' },
+  ];
+
+  const filteredTransactionHistory = transactionHistory.filter((entry) => {
+    if (activeTab === 'all') return true;
+    if (activeTab === 'withdraw') return entry.kind === 'withdrawal';
+    if (activeTab === 'deposit') return entry.source === 'cipher_deposit';
+    if (activeTab === 'axn') return entry.kind === 'transaction' && getEntryCurrency(entry) === 'AXN';
+    if (activeTab === 'cipher') return entry.kind === 'transaction' && getEntryCurrency(entry) === 'CIPHER';
+    return true;
+  });
+
+  // Deposits and withdrawals share the same 100,000 : 1 AXN/CIPHER-to-GRAM rate.
+  const showGramValue = activeTab === 'withdraw' || activeTab === 'deposit';
 
   useEffect(() => {
     let cancelled = false;
@@ -253,20 +277,50 @@ export default function Games() {
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 3 }}>Your balance activity and withdrawals.</div>
         </div>
 
+        {/* Asset Tabs */}
+        <div style={{
+          display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
+        }}>
+          {ASSET_TABS.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  flexShrink: 0,
+                  padding: '8px 16px',
+                  borderRadius: 50,
+                  border: isActive ? '1px solid rgba(59,130,246,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                  background: isActive ? 'linear-gradient(135deg, #1d4ed8, #2563eb)' : 'rgba(255,255,255,0.05)',
+                  color: isActive ? '#fff' : 'rgba(255,255,255,0.5)',
+                  fontSize: 12, fontWeight: 800,
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+                className="active:scale-95 transition-transform"
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
         <div style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
           {transactionsLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 28 }}>
               <Loader2 size={22} color="rgba(255,255,255,0.45)" className="animate-spin" />
             </div>
-          ) : transactionHistory.length === 0 ? (
+          ) : filteredTransactionHistory.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '30px 18px', color: 'rgba(255,255,255,0.25)' }}>
               <History size={26} strokeWidth={1.7} />
               <span style={{ fontSize: 12, fontWeight: 700 }}>No transactions yet</span>
             </div>
           ) : (
-            transactionHistory.map((entry, index) => {
+            filteredTransactionHistory.map((entry, index) => {
               const isWithdrawal = entry.kind === 'withdrawal';
               const status = String(entry.status || '').replace(/_/g, ' ');
+              const entryGram = showGramValue ? formatGram(axnToGram(Number(entry.amount || 0))) : null;
               return (
                 <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 16px', borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)' }}>
                   {isWithdrawal
@@ -281,7 +335,11 @@ export default function Games() {
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ color: isWithdrawal ? '#fff' : '#3b82f6', fontSize: 13, fontWeight: 900 }}>{isWithdrawal ? '-' : '+'}{Number(entry.amount || 0).toLocaleString()} {getEntryCurrency(entry)}</div>
-                    <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 3, textTransform: 'capitalize' }}>{status}</div>
+                    {entryGram ? (
+                      <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 3 }}>≈ {entryGram} GRAM</div>
+                    ) : (
+                      <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 3, textTransform: 'capitalize' }}>{status}</div>
+                    )}
                   </div>
                 </div>
               );
