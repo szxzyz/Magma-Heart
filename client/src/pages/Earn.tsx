@@ -7,6 +7,7 @@ import MenuPopup from "@/components/MenuPopup";
 import { showNotification } from "@/components/AppNotification";
 import { apiRequest } from "@/lib/queryClient";
 import { showMonatagRewardedAd, showAdgramAd, showGigapubAd } from "@/lib/showAd";
+import { CUT_SM, CORNER_ACCENTS_SM, cornerAccentStyle } from "@/lib/cutCorner";
 
 const BLUE = '#3b82f6';
 const BLUE_D = '#2563eb';
@@ -108,9 +109,12 @@ function AdProviderRow({
 
   return (
     <div style={{
-      width: '100%', borderRadius: 18, overflow: 'hidden',
-      marginBottom: 0, background: '#1a1a1a',
+      position: 'relative', width: '100%', clipPath: CUT_SM, overflow: 'hidden',
+      marginBottom: 0, background: '#1a1a1a', border: '1px solid rgba(0,200,255,0.22)',
     }}>
+      {CORNER_ACCENTS_SM.map((s, i) => (
+        <div key={i} style={{ ...cornerAccentStyle, ...s }} />
+      ))}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px' }}>
         <div style={{
           width: 48, height: 48, borderRadius: 12, flexShrink: 0,
@@ -821,10 +825,14 @@ export default function Earn() {
 
             {/* Earn category tabs */}
             <div style={{
+              position: 'relative',
               display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6,
-              padding: 4, marginBottom: 18, borderRadius: 14,
-              background: 'rgba(255,255,255,0.05)',
+              padding: 4, marginBottom: 18, clipPath: CUT_SM,
+              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(0,200,255,0.25)',
             }}>
+              {CORNER_ACCENTS_SM.map((s, i) => (
+                <div key={i} style={{ ...cornerAccentStyle, ...s }} />
+              ))}
               {tabs.map(tab => {
                 const active = selectedTab === tab.id;
                 return (
@@ -833,7 +841,7 @@ export default function Earn() {
                     onClick={() => setSelectedTab(tab.id)}
                     aria-pressed={active}
                     style={{
-                      border: 'none', borderRadius: 10, padding: '9px 4px',
+                      border: 'none', clipPath: CUT_SM, padding: '9px 4px',
                       background: active ? '#2563eb' : 'transparent',
                       color: active ? '#fff' : 'rgba(255,255,255,0.42)',
                       fontSize: 12, fontWeight: 800, cursor: 'pointer',
@@ -850,7 +858,8 @@ export default function Earn() {
             {selectedTab === 'ads' && (
               <>
                 {!axnNameClaimedToday && (
-                  <div style={{ background: CARD, borderRadius: 16, overflow: 'hidden', marginBottom: 18 }}>
+                  <div style={{ position: 'relative', background: CARD, clipPath: CUT_SM, overflow: 'hidden', marginBottom: 18, border: '1px solid rgba(0,200,255,0.22)' }}>
+                    {CORNER_ACCENTS_SM.map((s, i) => (<div key={i} style={{ ...cornerAccentStyle, ...s }} />))}
                     <AxnNameTaskDaily claimedToday={axnNameClaimedToday} />
                   </div>
                 )}
@@ -876,7 +885,8 @@ export default function Earn() {
             {selectedTab === 'social' && (
               <>
                 <SectionLabel title="Social Tasks" />
-                <div style={{ background: CARD, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
+                <div style={{ position: 'relative', background: CARD, clipPath: CUT_SM, overflow: 'hidden', marginBottom: 18, border: '1px solid rgba(0,200,255,0.22)' }}>
+                  {CORNER_ACCENTS_SM.map((s, i) => (<div key={i} style={{ ...cornerAccentStyle, ...s }} />))}
                   {socialTasks.length > 0
                     ? socialTasks.map((task: any) => <UserTaskRow key={task.id} task={task} />)
                     : <EmptyTaskState label="No channel/group tasks available right now." />}
@@ -888,7 +898,8 @@ export default function Earn() {
             {selectedTab === 'partner' && (
               <>
                 <SectionLabel title="Partner Tasks" />
-                <div style={{ background: CARD, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
+                <div style={{ position: 'relative', background: CARD, clipPath: CUT_SM, overflow: 'hidden', marginBottom: 18, border: '1px solid rgba(0,200,255,0.22)' }}>
+                  {CORNER_ACCENTS_SM.map((s, i) => (<div key={i} style={{ ...cornerAccentStyle, ...s }} />))}
                   {partnerTasks.length > 0
                     ? partnerTasks.map((task: any) => <PartnerTaskRow key={task.id} task={task} />)
                     : <EmptyTaskState label="No partner tasks available right now." />}
@@ -900,7 +911,8 @@ export default function Earn() {
             {selectedTab === 'bot' && (
               <>
                 <SectionLabel title="Bot Tasks" />
-                <div style={{ background: CARD, borderRadius: 14, overflow: 'hidden', marginBottom: 18 }}>
+                <div style={{ position: 'relative', background: CARD, clipPath: CUT_SM, overflow: 'hidden', marginBottom: 18, border: '1px solid rgba(0,200,255,0.22)' }}>
+                  {CORNER_ACCENTS_SM.map((s, i) => (<div key={i} style={{ ...cornerAccentStyle, ...s }} />))}
                   {botTasks.length > 0
                     ? botTasks.map((task: any) => <UserTaskRow key={task.id} task={task} />)
                     : <EmptyTaskState label="No bot/website tasks available right now." />}
