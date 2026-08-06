@@ -779,44 +779,6 @@ export default function Earn() {
 
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'max(86px, calc(env(safe-area-inset-bottom, 0px) + 86px))', paddingTop: 'calc(var(--header-height, 62px) + 12px)', width: '100%' }}>
 
-        {/* Banner — "I want my task here" */}
-        <div
-          onClick={() => setLocation('/add-mission')}
-          style={{ margin: '0 16px 18px', borderRadius: 18, overflow: 'hidden', cursor: 'pointer', position: 'relative', height: 130 }}
-          className="active:scale-[0.98] transition-transform"
-        >
-          <img src="/earn-banner.jpg" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 25%', filter: 'brightness(0.38)' }} />
-          {/* gradient: dark on right, lighter on left */}
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(260deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.15) 100%)' }} />
-          {/* Content pinned to right */}
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-end', padding: '14px 18px 16px' }}>
-            <div style={{
-              color: '#fff',
-              fontSize: 22,
-              fontWeight: 900,
-              letterSpacing: '-0.5px',
-              textAlign: 'right',
-              fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-              textShadow: '0 2px 16px rgba(0,0,0,0.9)',
-              lineHeight: 1.15,
-              marginBottom: 8,
-            }}>
-              I want my<br />task here
-            </div>
-            <div style={{
-              color: BLUE,
-              fontSize: 11,
-              fontWeight: 800,
-              textDecoration: 'underline',
-              textUnderlineOffset: 3,
-              letterSpacing: '0.02em',
-              textShadow: '0 1px 8px rgba(0,0,0,0.8)',
-            }}>
-              Create your own task →
-            </div>
-          </div>
-        </div>
-
         <div style={{ padding: '0 16px' }}>
 
             {/* Earn category tabs */}
