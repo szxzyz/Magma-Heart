@@ -126,7 +126,9 @@ export default function DepositPopup({ onClose }: Props) {
           ×
         </button>
 
-        <div style={{ color: "#fff", fontSize: 18, fontWeight: 900, letterSpacing: "0.02em" }}>BUY CIPHER</div>
+        <div style={{ color: "#fff", fontSize: 18, fontWeight: 900, letterSpacing: "0.02em" }}>
+          <span>BUY</span> <span style={{ color: "#3b82f6" }}>CIPHER</span>
+        </div>
         <div style={{ color: "#60a5fa", fontSize: 12, fontWeight: 700, marginTop: 5 }}>1 GRAM = 100,000 CIPHER</div>
 
         {connectedAddress ? (

@@ -4,11 +4,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, Wifi, CalendarDays, Receipt, Zap, ChevronRight, ArrowLeft,
   TrendingUp, Activity, RefreshCw, Star, FileText, Lock, Info, Shield,
-  Loader2, Clock, CheckCircle, XCircle,
+  Loader2,
 } from "lucide-react";
 import { RiBarChartFill } from "react-icons/ri";
-import { AXNIcon } from "@/components/AXNIcon";
-import { FaReceipt, FaBalanceScale, FaCrown } from "react-icons/fa";
+import { FaBalanceScale, FaCrown } from "react-icons/fa";
 import { MdOutlineSupportAgent } from "react-icons/md";
 import { BsQuestionCircleFill } from "react-icons/bs";
 import { format } from "date-fns";
@@ -21,7 +20,7 @@ interface MenuPopupProps {
   onOpenInvite?: () => void;
 }
 
-type Overlay = "transactions" | "stats" | "legal" | "terms" | "faq" | null;
+type Overlay = "stats" | "legal" | "terms" | "faq" | null;
 
 const CUT_SM = 'polygon(8px 0%,calc(100% - 8px) 0%,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0% calc(100% - 8px),0% 8px)';
 const CUT_LG = 'polygon(14px 0%,calc(100% - 14px) 0%,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0% calc(100% - 14px),0% 14px)';
@@ -53,14 +52,10 @@ export default function MenuPopup({ onClose, onOpenInvite }: MenuPopupProps) {
   const [overlay, setOverlay] = useState<Overlay>(null);
 
   const { data: user } = useQuery<any>({ queryKey: ["/api/auth/user"], retry: false, staleTime: 60000 });
-  const { data: txData, isLoading: txLoading } = useQuery<any>({
-    queryKey: ["/api/withdrawals"], enabled: overlay === "transactions", retry: false,
-  });
   const { data: projectStats } = useQuery<any>({
     queryKey: ["/api/project/stats"], enabled: overlay === "stats", retry: false, staleTime: 30000,
   });
 
-  const withdrawals = txData?.withdrawals || [];
   const firstName: string = user?.firstName || user?.username || "User";
   const profileImageUrl: string | null =
     user?.profileImageUrl ||
@@ -68,19 +63,6 @@ export default function MenuPopup({ onClose, onOpenInvite }: MenuPopupProps) {
     null;
   const initials = firstName.slice(0, 2).toUpperCase();
   const joinedAt = user?.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : null;
-
-  const getStatusIcon = (status: string) => {
-    const s = status?.toLowerCase();
-    if (s?.includes("approved") || s?.includes("success") || s?.includes("paid")) return <CheckCircle className="w-4 h-4 text-green-400" />;
-    if (s?.includes("reject") || s?.includes("failed")) return <XCircle className="w-4 h-4 text-red-400" />;
-    return <Clock className="w-4 h-4 text-yellow-400" />;
-  };
-  const getStatusColor = (status: string) => {
-    const s = status?.toLowerCase();
-    if (s?.includes("approved") || s?.includes("success") || s?.includes("paid")) return "text-green-400";
-    if (s?.includes("reject") || s?.includes("failed")) return "text-red-400";
-    return "text-yellow-400";
-  };
 
   return (
     <motion.div
@@ -90,10 +72,10 @@ export default function MenuPopup({ onClose, onOpenInvite }: MenuPopupProps) {
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Outer border — blue glow + cut corners */}
-      <div style={{ clipPath: CUT_LG, padding: '1.5px', background: 'linear-gradient(135deg,rgba(0,160,255,0.75) 0%,rgba(0,80,200,0.45) 50%,rgba(0,160,255,0.75) 100%)', boxShadow: '0 0 32px rgba(0,120,255,0.45), 0 0 64px rgba(0,80,200,0.2)', width: '100%', maxWidth: 384 }}>
+      <div style={{ clipPath: CUT_LG, padding: '1.5px', background: 'rgba(255,255,255,0.08)', boxShadow: '0 20px 70px rgba(0,0,0,0.55)', width: '100%', maxWidth: 384 }}>
       <motion.div
         className="relative w-full popup-glow-open"
-        style={{ clipPath: CUT_LG, background: 'linear-gradient(180deg,rgba(5,16,44,0.99) 0%,rgba(3,9,26,0.99) 100%)', position: 'relative', overflow: 'hidden' }}
+        style={{ clipPath: CUT_LG, background: '#0a0a0a', position: 'relative', overflow: 'hidden' }}
         initial={{ scale: 0.88, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.88, opacity: 0, y: 20 }}
@@ -133,7 +115,6 @@ export default function MenuPopup({ onClose, onOpenInvite }: MenuPopupProps) {
 
             <div className="py-2">
               <MenuItem icon={<RiBarChartFill className="w-5 h-5 text-blue-400" />} label="Project Statistics" onClick={() => setOverlay("stats")} />
-              <MenuItem icon={<FaReceipt className="w-5 h-5 text-yellow-400" />} label="Transactions" onClick={() => setOverlay("transactions")} />
               <MenuItem icon={<BsQuestionCircleFill className="w-5 h-5 text-sky-400" />} label="FAQs" onClick={() => setOverlay("faq")} />
               <MenuItem icon={<MdOutlineSupportAgent className="w-5 h-5 text-pink-400" />} label="Support" onClick={() => {
                 const tg = (window as any).Telegram?.WebApp;
@@ -165,7 +146,7 @@ export default function MenuPopup({ onClose, onOpenInvite }: MenuPopupProps) {
                 exit={{ opacity: 0, x: 24 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 className="absolute inset-0 flex flex-col"
-                style={{ background: 'rgba(8,14,32,0.85)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }}
+                style={{ background: 'rgba(10,10,10,0.98)' }}
               >
                 {/* Scrollable content */}
                 <div className="flex-1 overflow-y-auto min-h-0">
@@ -197,32 +178,6 @@ export default function MenuPopup({ onClose, onOpenInvite }: MenuPopupProps) {
                           </StatSection>
                         </>
                       )}
-                    </div>
-                  )}
-
-                  {overlay === "transactions" && (
-                    <div className="px-4 py-4 space-y-2">
-                      {txLoading ? (
-                        <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 text-white/30 animate-spin" /></div>
-                      ) : withdrawals.length === 0 ? (
-                        <div className="flex flex-col items-center py-10 gap-3">
-                          <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center">
-                            <Receipt className="w-4 h-4 text-white/20" strokeWidth={1.5} />
-                          </div>
-                          <p className="text-white/25 text-xs font-bold uppercase tracking-widest">No transactions yet</p>
-                        </div>
-                      ) : withdrawals.map((w: any) => (
-                        <div key={w.id} className="bg-white/[0.06] border border-white/5 rounded-2xl p-3.5 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <AXNIcon size={16} />
-                            <p className="text-white text-sm font-black tabular-nums">{parseFloat(w.amount || "0").toLocaleString()}</p>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <p className={`text-xs font-black capitalize ${getStatusColor(w.status)}`}>{w.status}</p>
-                            <p className="text-white/30 text-[10px] mt-0.5">{w.createdAt ? format(new Date(w.createdAt), "dd MMM · HH:mm") : "—"}</p>
-                          </div>
-                        </div>
-                      ))}
                     </div>
                   )}
 
@@ -319,7 +274,7 @@ function MenuItem({ icon, label, onClick, right }: { icon: React.ReactNode; labe
       <button
         onClick={onClick}
         className="w-full flex items-center justify-between active:opacity-70 transition-opacity"
-        style={{ clipPath: CUT_SM, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(0,120,255,0.18)', padding: '10px 14px' }}
+        style={{ clipPath: CUT_SM, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', padding: '10px 14px' }}
       >
         <div className="flex items-center gap-3">
           {icon}
