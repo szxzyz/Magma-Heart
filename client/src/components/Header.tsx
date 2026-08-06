@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { forwardRef, useImperativeHandle } from "react";
+import { Plus } from "lucide-react";
+import DepositPopup from "@/components/DepositPopup";
 
 interface HeaderProps {
   onMenuOpen?: () => void;
@@ -15,6 +17,7 @@ interface HeaderProps {
 const Header = forwardRef<HTMLDivElement, HeaderProps>(
   ({ onMenuOpen }, ref) => {
     const [overlayTop, setOverlayTop] = useState(0);
+    const [depositOpen, setDepositOpen] = useState(false);
     const innerRef = useRef<HTMLDivElement>(null);
 
     useImperativeHandle(ref, () => innerRef.current!);
@@ -142,16 +145,30 @@ const Header = forwardRef<HTMLDivElement, HeaderProps>(
           </div>
 
           {/* Right — CIPHER balance */}
-          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 7px 6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
             <div style={{ width: 18, height: 18, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-              <img src="/cipher-icon.jpg" alt="CIPHER" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              <img src="/cipher-icon.png" alt="CIPHER" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             </div>
             <span style={{ color: '#fff', fontSize: 15, fontWeight: 900, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
               {cipherBalance.toLocaleString()}
             </span>
+            <button
+              aria-label="Buy CIPHER"
+              onClick={() => setDepositOpen(true)}
+              className="active:scale-90 transition-transform"
+              style={{
+                width: 22, height: 22, borderRadius: 7, border: 'none',
+                background: '#2563eb', color: '#fff', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                marginLeft: 2,
+              }}
+            >
+              <Plus size={15} strokeWidth={2.8} />
+            </button>
           </div>
 
         </div>
+        {depositOpen && <DepositPopup onClose={() => setDepositOpen(false)} />}
       </div>
     );
   }
