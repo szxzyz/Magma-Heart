@@ -5,7 +5,6 @@ import Header from "@/components/Header";
 import MenuPopup from "@/components/MenuPopup";
 import RewardsInfoPopup from "@/components/RewardsInfoPopup";
 import { showNotification } from "@/components/AppNotification";
-import { CUT_SM, CORNER_ACCENTS_SM, cornerAccentStyle } from "@/lib/cutCorner";
 
 const CARD = "rgba(255,255,255,0.07)";
 const TEXT = "#fff";
@@ -86,8 +85,7 @@ export default function Friend() {
           </p>
         </section>
 
-        <section style={{ position: "relative", marginBottom: 12, padding: "14px 16px", clipPath: CUT_SM, background: CARD, overflow: "hidden", border: "1px solid rgba(0,200,255,0.22)" }}>
-          {CORNER_ACCENTS_SM.map((s, i) => (<div key={i} style={{ ...cornerAccentStyle, ...s }} />))}
+        <section style={{ marginBottom: 12, padding: "14px 16px", borderRadius: 14, background: CARD, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
             <div style={{ borderRight: "1px solid rgba(255,255,255,0.06)" }}>
               <div style={{ color: "#fff", fontSize: 20, lineHeight: 1, fontWeight: 900 }}>{friendsInvited.toLocaleString()}</div>
@@ -100,8 +98,7 @@ export default function Friend() {
           </div>
         </section>
 
-        <section style={{ position: "relative", marginBottom: 12, padding: "12px 12px 11px", clipPath: CUT_SM, background: CARD, border: "1px solid rgba(0,200,255,0.22)" }}>
-          {CORNER_ACCENTS_SM.map((s, i) => (<div key={i} style={{ ...cornerAccentStyle, ...s }} />))}
+        <section style={{ marginBottom: 12, padding: "12px 12px 11px", borderRadius: 15, background: CARD }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 9 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <Link2 size={20} color="rgba(255,255,255,0.7)" strokeWidth={1.8} />
@@ -143,8 +140,7 @@ export default function Friend() {
           ) : (
             <div style={{ display: "grid", gap: 6 }}>
               {entries.map((entry) => (
-                <div key={`${entry.rank}-${entry.username || entry.firstName}`} style={{ position: "relative", display: "grid", gridTemplateColumns: "38px 1fr auto", gap: 10, alignItems: "center", padding: "12px 14px", clipPath: CUT_SM, background: CARD, border: "1px solid rgba(0,200,255,0.18)" }}>
-                  {CORNER_ACCENTS_SM.map((s, i) => (<div key={i} style={{ ...cornerAccentStyle, ...s }} />))}
+                <div key={`${entry.rank}-${entry.username || entry.firstName}`} style={{ display: "grid", gridTemplateColumns: "38px 1fr auto", gap: 10, alignItems: "center", padding: "12px 14px", borderRadius: 13, background: CARD }}>
                   <div style={{ display: "flex", justifyContent: "center" }}><RankIcon rank={entry.rank} /></div>
                   <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, fontWeight: entry.rank <= 3 ? 800 : 600, color: entry.rank <= 3 ? "#facc15" : TEXT }}>
                     {entry.username ? `@${entry.username}` : entry.firstName}
