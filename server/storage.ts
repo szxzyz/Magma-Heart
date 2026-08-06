@@ -933,7 +933,9 @@ export class DatabaseStorage implements IStorage {
     return referral;
   }
 
-  // Check and activate referral bonus when friend watches 10 ads — gives 150 AXN one-time to referrer
+  // Activate the referral relationship when the referred user completes
+  // the platform's membership check. Rewards are granted separately and
+  // automatically by the AXN milestone and deposit paths.
   async checkAndActivateReferralOnChannelJoin(userId: string): Promise<void> {
     try {
       const [user] = await db.select().from(users).where(eq(users.id, userId));
@@ -966,6 +968,88 @@ export class DatabaseStorage implements IStorage {
       }
     } catch (error) {
       console.error('Error activating referral on channel join:', error);
+    }
+  }
+
+  /**
+   * Grant the fixed referral reward once the referred user's NFTs have
+   * produced 100 AXN. The referral row is locked so concurrent claims cannot
+   * grant the reward twice.
+   */
+  async checkAndGrantReferralMilestone(referredUserId: string): Promise<void> {
+    const { pool } = await import('./db');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const referralResult = await client.query(
+        `SELECT id, referrer_id
+         FROM referrals
+         WHERE referee_id = $1
+           AND COALESCE(referral_reward_granted, FALSE) = FALSE
+         FOR UPDATE`,
+        [referredUserId],
+      );
+      if (referralResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      const totalResult = await client.query(
+        `SELECT COALESCE(SUM(total_claimed_axn::numeric), 0) AS total_axn
+         FROM user_machines
+         WHERE user_id = $1`,
+        [referredUserId],
+      );
+      const totalAxn = Number(totalResult.rows[0]?.total_axn || 0);
+      if (totalAxn < 100) {
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      const { id: referralId, referrer_id: referrerId } = referralResult.rows[0];
+      await client.query(
+        `UPDATE users
+         SET balance = COALESCE(balance::numeric, 0) + $1,
+             total_earned = COALESCE(total_earned::numeric, 0) + $1,
+             total_earnings = COALESCE(total_earnings::numeric, 0) + $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [1000, referrerId],
+      );
+      await client.query(
+        `UPDATE referrals
+         SET referral_reward_granted = TRUE,
+             reward_amount = $1,
+             status = 'completed',
+             completed_at = COALESCE(completed_at, NOW())
+         WHERE id = $2`,
+        [1000, referralId],
+      );
+      const earningResult = await client.query(
+        `INSERT INTO earnings (user_id, amount, source, description)
+         VALUES ($1, $2, 'referral_milestone', 'Automatic reward: referred friend collected 100 AXN')
+         RETURNING id`,
+        [referrerId, 1000],
+      );
+      await client.query(
+        `INSERT INTO transactions (user_id, amount, type, source, description, metadata)
+         VALUES ($1, $2, 'addition', 'referral_milestone',
+                 'Automatic referral reward for 100 AXN milestone',
+                 jsonb_build_object(
+                   'referralId', $3,
+                   'referredUserId', $4,
+                   'milestoneAxn', 100,
+                   'earningId', $5
+                 ))`,
+        [referrerId, 1000, referralId, referredUserId, earningResult.rows[0]?.id],
+      );
+      await client.query('COMMIT');
+      console.log(`✅ Referral milestone granted: ${referrerId} earned 1000 CIPHER for ${referredUserId}`);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error granting referral milestone:', error);
+    } finally {
+      client.release();
     }
   }
 
@@ -1237,7 +1321,7 @@ export class DatabaseStorage implements IStorage {
       .from(earnings)
       .where(and(
         eq(earnings.userId, userId),
-        sql`${earnings.source} IN ('referral_commission', 'referral')`
+        sql`${earnings.source} IN ('referral_milestone', 'referral_deposit_commission')`
       ));
 
     return result.total;
@@ -2605,7 +2689,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(earnings, and(
         eq(users.id, earnings.userId),
         gte(earnings.createdAt, monthStart),
-        sql`${earnings.source} NOT IN ('withdrawal', 'referral_commission')`
+        sql`${earnings.source} <> 'withdrawal'`
       ))
       .where(eq(users.banned, false))
       .groupBy(users.id)
@@ -3032,6 +3116,7 @@ export class DatabaseStorage implements IStorage {
       );
 
       await client.query('COMMIT');
+      await this.checkAndGrantReferralMilestone(userId);
       return { success: true, amount: totalFlooredAxn, message: `Claimed ${totalFlooredAxn.toLocaleString()} AXN!` };
     } catch (error) {
       await client.query('ROLLBACK');

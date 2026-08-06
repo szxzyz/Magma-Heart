@@ -25,6 +25,91 @@ import { config, getChannelConfig } from "./config";
 // Map: sessionId -> { socket: WebSocket, userId: string }
 const connectedUsers = new Map<string, { socket: WebSocket; userId: string }>();
 
+const AXN_PER_TON = 100_000;
+const REFERRAL_MILESTONE_AXN = 100;
+const REFERRAL_MILESTONE_REWARD_CIPHER = 1_000;
+const REFERRAL_DEPOSIT_COMMISSION_RATE = 0.05;
+
+/**
+ * Deposit payments arrive in TON, while referral rewards are credited to the
+ * integer CIPHER balance. Convert the deposit before calculating 5%.
+ */
+async function creditReferralDepositCommission(
+  referredUserId: string,
+  tonAmount: number,
+  orderId: string,
+): Promise<void> {
+  const depositCipher = tonAmount * AXN_PER_TON;
+  const commission = Math.floor(depositCipher * REFERRAL_DEPOSIT_COMMISSION_RATE);
+  if (!Number.isFinite(commission) || commission <= 0) return;
+
+  await db.transaction(async (tx) => {
+    // Serialize duplicate webhook deliveries for this order before checking
+    // the idempotency record.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${orderId}))`);
+
+    const alreadyCredited = await tx.execute(sql`
+      SELECT 1
+      FROM transactions
+      WHERE source = 'referral_deposit_commission'
+        AND metadata->>'orderId' = ${orderId}
+      LIMIT 1
+    `);
+    if ((alreadyCredited.rows || []).length > 0) return;
+
+    const referralRows = await tx.execute(sql`
+      SELECT referrer_id
+      FROM referrals
+      WHERE referee_id = ${referredUserId}
+      LIMIT 1
+    `);
+    const referrerId = (referralRows.rows[0] as any)?.referrer_id;
+    if (!referrerId) return;
+
+    await tx.execute(sql`
+      UPDATE users
+      SET balance = COALESCE(balance::numeric, 0) + ${commission},
+          total_earned = COALESCE(total_earned::numeric, 0) + ${commission},
+          total_earnings = COALESCE(total_earnings::numeric, 0) + ${commission},
+          updated_at = NOW()
+      WHERE id = ${referrerId}
+    `);
+    await tx.execute(sql`
+      UPDATE referrals
+      SET deposit_commission_earned = COALESCE(deposit_commission_earned::numeric, 0) + ${commission}
+      WHERE referrer_id = ${referrerId}
+        AND referee_id = ${referredUserId}
+    `);
+    await tx.execute(sql`
+      WITH earning_row AS (
+        INSERT INTO earnings (user_id, amount, source, description)
+        VALUES (
+          ${referrerId},
+          ${commission},
+          'referral_deposit_commission',
+          ${`5% deposit commission from referred friend (${tonAmount} TON)`}
+        )
+        RETURNING id
+      )
+      INSERT INTO transactions (user_id, amount, type, source, description, metadata)
+      SELECT
+        ${referrerId},
+        ${commission},
+        'addition',
+        'referral_deposit_commission',
+        'Automatic referral deposit commission',
+        jsonb_build_object(
+          'orderId', ${orderId},
+          'referredUserId', ${referredUserId},
+          'depositTon', ${tonAmount},
+          'depositCipher', ${depositCipher},
+          'rate', ${REFERRAL_DEPOSIT_COMMISSION_RATE}
+        )
+      FROM earning_row
+    `);
+  });
+}
+
 // Function to verify session token against PostgreSQL sessions table
 async function verifySessionToken(sessionToken: string): Promise<{ isValid: boolean; userId?: string }> {
   try {
@@ -520,30 +605,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Ad slot ${slot} reward`,
       });
 
-      // Credit 10% referral commission to referrer (if this user was referred)
-      try {
-        const referralRows = await db.execute(sql`
-          SELECT referrer_id FROM referrals WHERE referred_id = ${user.id} LIMIT 1
-        `);
-        const referrerId = (referralRows.rows[0] as any)?.referrer_id;
-        if (referrerId) {
-          const commission = Math.floor(config.reward * 0.1);
-          if (commission > 0) {
-            await db.execute(sql`
-              UPDATE users SET balance = COALESCE(balance::numeric, 0) + ${commission} WHERE id = ${referrerId}
-            `);
-            await storage.addEarning({
-              userId: referrerId,
-              amount: commission.toString(),
-              source: 'referral_commission',
-              description: `10% commission from friend ad watch`,
-            });
-          }
-        }
-      } catch (_commErr) {
-        // Non-critical — don't fail the main reward
-      }
-
       const newCount = currentCount + 1;
       const updatedUser = await storage.getUser(user.id);
       const tomorrowMidnightMs = new Date(new Date().setUTCHours(24, 0, 0, 0)).getTime();
@@ -583,77 +644,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ count });
     } catch (error) {
       console.error("New referral count error:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // POST /api/milestone/claim — persistent invite milestone claim
-  app.post("/api/milestone/claim", authenticateTelegram, async (req: any, res) => {
-    try {
-      const user = req.user?.user;
-      if (!user) return res.status(401).json({ message: "Not authenticated" });
-      const { count, reward } = req.body;
-      if (!count || !reward) return res.status(400).json({ message: "Missing count or reward" });
-      // Ensure table exists
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS referral_milestone_claims (
-          id SERIAL PRIMARY KEY,
-          user_id VARCHAR NOT NULL,
-          milestone_count INTEGER NOT NULL,
-          reward INTEGER NOT NULL,
-          claimed_at TIMESTAMP DEFAULT NOW(),
-          UNIQUE(user_id, milestone_count)
-        )
-      `);
-      // Check already claimed
-      const existing = await db.execute(sql`
-        SELECT id FROM referral_milestone_claims WHERE user_id = ${user.id} AND milestone_count = ${count}
-      `);
-      if (existing.rows && existing.rows.length > 0) {
-        return res.status(400).json({ message: "Already claimed", alreadyClaimed: true });
-      }
-      // Check user has enough NEW verified friends (after baseline date)
-      const BASELINE_DATE = '2026-05-25';
-      const friendsCount = await db.execute(sql`
-        SELECT COUNT(*) as count FROM referrals r
-        JOIN users u ON u.id = r.referee_id
-        WHERE r.referrer_id = ${user.id}
-          AND r.status = 'completed'
-          AND u.banned = FALSE
-          AND r.created_at >= ${BASELINE_DATE}::date
-      `);
-      const verified = parseInt(friendsCount.rows?.[0]?.count || "0");
-      if (verified < count) {
-        return res.status(400).json({ message: `Need ${count} new verified friends, you have ${verified}` });
-      }
-      // Insert claim record + credit balance atomically
-      await db.execute(sql`
-        INSERT INTO referral_milestone_claims (user_id, milestone_count, reward) VALUES (${user.id}, ${count}, ${reward})
-      `);
-      await db.execute(sql`UPDATE users SET balance = COALESCE(balance::numeric, 0) + ${reward} WHERE id = ${user.id}`);
-      res.json({ success: true, claimed: reward });
-    } catch (error: any) {
-      if (error?.code === '23505') return res.status(400).json({ message: "Already claimed", alreadyClaimed: true });
-      console.error("Error claiming milestone:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // GET /api/milestone/claimed — get list of claimed milestones
-  app.get("/api/milestone/claimed", authenticateTelegram, async (req: any, res) => {
-    try {
-      const user = req.user?.user;
-      if (!user) return res.status(401).json({ message: "Not authenticated" });
-      try {
-        const rows = await db.execute(sql`
-          SELECT milestone_count FROM referral_milestone_claims WHERE user_id = ${user.id}
-        `);
-        const claimed = (rows.rows || []).map((r: any) => Number(r.milestone_count));
-        res.json({ claimed });
-      } catch {
-        res.json({ claimed: [] });
-      }
-    } catch (error) {
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -1677,16 +1667,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user.referralCode = updatedUser?.referralCode || '';
       }
       
-      // Ensure friendsInvited is properly calculated from COMPLETED referrals only
-      // Pending referrals (where friend hasn't watched their first ad) don't count
-      // Also exclude banned users from referral count
+      // Friends Invited counts every non-banned referred user. No ad or
+      // earnings threshold is required for the new referral program.
       const actualReferralsCount = await db
         .select({ count: sql<number>`count(*)` })
         .from(referrals)
         .innerJoin(users, eq(referrals.refereeId, users.id))
         .where(and(
           eq(referrals.referrerId, userId),
-          eq(referrals.status, 'completed'),
           eq(users.banned, false)
         ));
       
@@ -1700,17 +1688,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(users.id, userId));
       }
 
-      // Count referrals COMPLETED TODAY (friends who finished 10 ads today) — for daily milestone goal
-      const todayStart = new Date();
-      todayStart.setUTCHours(0, 0, 0, 0);
-      const todayReferralsRes = await db.execute(sql`
-        SELECT COUNT(*) as count FROM referrals
-        WHERE referrer_id = ${userId}
-          AND status = 'completed'
-          AND completed_at >= ${todayStart.toISOString()}::timestamptz
-      `);
-      const todayReferrals = Number((todayReferralsRes.rows?.[0] as any)?.count || 0);
-      
       // Add referral link - use /start flow for reliable referral tracking
       const botUsername = await getBotUsername();
       const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
@@ -1730,7 +1707,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         ...user,
         friendsInvited,
-        todayReferrals,
         referralLink,
         planStatus: 'Trial',
         isAdmin: adminFlag,
@@ -1815,12 +1791,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const withdrawalCurrency = getSetting('withdrawal_currency', 'TON');
       
-      // Referral reward settings
-      const referralRewardEnabled = getSetting('referral_reward_enabled', 'false') === 'true';
-      const referralRewardTON = parseFloat(getSetting('referral_reward_ton', '0.0005'));
-      const referralRewardAXN = parseInt(getSetting('referral_reward_axn', '50'));
-      const referralAdsRequired = parseInt(getSetting('referral_ads_required', '10')); // Ads needed for referral bonus (10 ads = 50 AXN to referrer)
-      
       // Daily task rewards (for TaskSection.tsx)
       const streakReward = parseInt(getSetting('streak_reward', '100')); // Daily streak claim reward in AXN
       const shareTaskReward = parseInt(getSetting('share_task_reward', '1000')); // Share with friends reward in AXN
@@ -1849,7 +1819,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const withdrawalBugRequirementEnabled = getSetting('withdrawal_bug_requirement_enabled', 'true') === 'true';
       const activePromoCode = getSetting('active_promo_code', ''); // Current active promo code
       
-      // Legacy compatibility - keep old values for backwards compatibility
+      // Compatibility values used by older task and withdrawal clients.
       const channelTaskCostTON_val = parseFloat(getSetting('channel_task_cost', '0.0003'));
       const channelTaskRewardAXN_val = parseInt(getSetting('channel_task_reward', '30'));
       const minWithdrawalAmount_val = minWithdrawalAmount;
@@ -1857,7 +1827,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const botTaskCostTON_val = parseFloat(getSetting('bot_task_cost', '0.0003'));
       const botTaskRewardAXN_val = parseInt(getSetting('bot_task_reward', '20'));
       const minimumConvertTON_val = minimumConvertTON;
-      const referralRewardTON_val = referralRewardTON;
 
       const taskCostPerClick = channelTaskCostTON_val; // Use channel cost as default
       const taskRewardPerClick = channelTaskRewardAXN_val / 10000; // Legacy format for compatibility
@@ -1865,7 +1834,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const dailyAdLimit = parseInt(getSetting('daily_ad_limit', '50'));
       const rewardPerAd = parseInt(getSetting('reward_per_ad', '1000'));
       const seasonBroadcastActive = getSetting('season_broadcast_active', 'false') === 'true';
-      const affiliateCommission = parseInt(getSetting('affiliate_commission', '10'));
       const walletChangeFeeAXN = parseInt(getSetting('wallet_change_fee_axn', '5000'));
       
       res.json({
@@ -1873,8 +1841,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rewardPerAd,
         rewardPerAdAXN: rewardPerAd,
         seasonBroadcastActive,
-        affiliateCommission,
-        affiliateCommissionPercent: affiliateCommission,
         walletChangeFee: walletChangeFeeAXN,
         walletChangeFeeAXN: walletChangeFeeAXN,
         minWithdrawalAmount: minWithdrawalAmount_val,
@@ -1892,10 +1858,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         minimumConvertTON: minimumConvertTON_val,
         minimumClicks,
         withdrawalCurrency,
-        referralRewardEnabled,
-        referralRewardTON: referralRewardTON_val,
-        referralRewardAXN,
-        referralAdsRequired,
         // Daily task rewards
         streakReward,
         shareTaskReward,
@@ -2220,32 +2182,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Leaderboard endpoints
-  // Top 10 referral leaderboard — ranked by active friends (referred users with >= 500 CIPHER)
-  app.get('/api/leaderboard/referrals', async (req: any, res) => {
+  // Top 10 users by currently active NFT ownership.
+  app.get('/api/leaderboard/nft-holders', async (req: any, res) => {
     try {
       const { pool } = await import('./db');
       const userId = req.session?.user?.user?.id || req.user?.user?.id;
       const adminTgId = process.env.TELEGRAM_ADMIN_ID || null;
 
-      // Top 10 by active friends count (referred users who earned >= 500 CIPHER)
       const result = await pool.query(`
         SELECT
           u.id,
           u.username,
           u.first_name,
-          COUNT(r.referred_id) FILTER (
-            WHERE COALESCE(ru.balance::numeric, 0) >= 500
-          ) AS active_friends_count
+          COUNT(um.id)::int AS active_nfts
         FROM users u
-        LEFT JOIN referrals r ON CAST(r.referrer_id AS TEXT) = CAST(u.id AS TEXT)
-        LEFT JOIN users ru ON CAST(ru.id AS TEXT) = CAST(r.referred_id AS TEXT)
+        JOIN user_machines um ON um.user_id = u.id AND um.expires_at > NOW()
         WHERE u.banned = FALSE
           AND ($1::text IS NULL OR CAST(u.telegram_id AS TEXT) != $1)
+          AND (u.username IS NULL OR u.username != 'admin')
         GROUP BY u.id, u.username, u.first_name
-        HAVING COUNT(r.referred_id) FILTER (
-          WHERE COALESCE(ru.balance::numeric, 0) >= 500
-        ) > 0
-        ORDER BY active_friends_count DESC
+        ORDER BY active_nfts DESC, u.created_at ASC
         LIMIT 10
       `, [adminTgId]);
 
@@ -2253,31 +2209,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rank: i + 1,
         username: r.username || null,
         firstName: r.first_name || 'Anonymous',
-        referrals: Number(r.active_friends_count) || 0,
-        axnEarned: 0,
+        activeNfts: Number(r.active_nfts) || 0,
       }));
 
-      // Current user's rank
       let myRank = null;
       if (userId) {
         const rankResult = await pool.query(`
-          SELECT sub.rank, sub.username, sub.first_name, sub.active_friends_count
+          SELECT sub.rank, sub.username, sub.first_name, sub.active_nfts
           FROM (
             SELECT
               u.id,
               u.username,
               u.first_name,
-              COUNT(r.referred_id) FILTER (
-                WHERE COALESCE(ru.balance::numeric, 0) >= 500
-              ) AS active_friends_count,
-              RANK() OVER (
-                ORDER BY COUNT(r.referred_id) FILTER (
-                  WHERE COALESCE(ru.balance::numeric, 0) >= 500
-                ) DESC
-              ) AS rank
+              COUNT(um.id)::int AS active_nfts,
+              RANK() OVER (ORDER BY COUNT(um.id) DESC, MIN(u.created_at) ASC) AS rank
             FROM users u
-            LEFT JOIN referrals r ON CAST(r.referrer_id AS TEXT) = CAST(u.id AS TEXT)
-            LEFT JOIN users ru ON CAST(ru.id AS TEXT) = CAST(r.referred_id AS TEXT)
+            JOIN user_machines um ON um.user_id = u.id AND um.expires_at > NOW()
             WHERE u.banned = FALSE
               AND ($1::text IS NULL OR CAST(u.telegram_id AS TEXT) != $1)
             GROUP BY u.id, u.username, u.first_name
@@ -2286,122 +2233,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `, [adminTgId, userId]);
         if (rankResult.rows.length > 0) {
           const r = rankResult.rows[0];
-          myRank = {
-            rank: Number(r.rank),
-            username: r.username || null,
-            firstName: r.first_name || 'Anonymous',
-            referrals: Number(r.active_friends_count) || 0,
-            axnEarned: 0,
-          };
+          myRank = { rank: Number(r.rank), username: r.username || null, firstName: r.first_name || 'Anonymous', activeNfts: Number(r.active_nfts) || 0 };
         }
       }
 
       return res.json({ leaderboard: rows, myRank });
     } catch (error) {
-      console.error('Referral leaderboard error:', error);
-      return res.status(500).json({ message: 'Internal server error' });
-    }
-  });
-
-  // Top CIPHER earners leaderboard
-  app.get('/api/leaderboard/cipher-earners', async (req: any, res) => {
-    try {
-      const { pool } = await import('./db');
-      const userId = req.session?.user?.user?.id || req.user?.user?.id;
-      const adminTgId = process.env.TELEGRAM_ADMIN_ID || null;
-
-      const result = await pool.query(`
-        SELECT username, first_name, COALESCE(balance::numeric, 0) AS amount
-        FROM users
-        WHERE banned = FALSE
-          AND COALESCE(balance::numeric, 0) > 0
-          AND ($1::text IS NULL OR CAST(telegram_id AS TEXT) != $1)
-          AND (username IS NULL OR username != 'admin')
-        ORDER BY COALESCE(balance::numeric, 0) DESC
-        LIMIT 10
-      `, [adminTgId]);
-
-      const rows = result.rows.map((r: any, i: number) => ({
-        rank: i + 1,
-        username: r.username || null,
-        firstName: r.first_name || 'Anonymous',
-        amount: Number(r.amount) || 0,
-      }));
-
-      let myRank = null;
-      if (userId) {
-        const rankResult = await pool.query(`
-          SELECT sub.rank, sub.username, sub.first_name, sub.amount
-          FROM (
-            SELECT id, username, first_name,
-              COALESCE(balance::numeric, 0) AS amount,
-              RANK() OVER (ORDER BY COALESCE(balance::numeric, 0) DESC) AS rank
-            FROM users
-            WHERE banned = FALSE
-              AND ($1::text IS NULL OR CAST(telegram_id AS TEXT) != $1)
-          ) sub
-          WHERE sub.id = $2
-        `, [adminTgId, userId]);
-        if (rankResult.rows.length > 0) {
-          const r = rankResult.rows[0];
-          myRank = { rank: Number(r.rank), username: r.username || null, firstName: r.first_name || 'Anonymous', amount: Number(r.amount) || 0 };
-        }
-      }
-
-      return res.json({ leaderboard: rows, myRank });
-    } catch (error) {
-      console.error('Cipher earners leaderboard error:', error);
-      return res.status(500).json({ message: 'Internal server error' });
-    }
-  });
-
-  // Top AXN holders leaderboard — uses wallet_balance (actual AXN in wallet)
-  app.get('/api/leaderboard/axn-holders', async (req: any, res) => {
-    try {
-      const { pool } = await import('./db');
-      const userId = req.session?.user?.user?.id || req.user?.user?.id;
-      const adminTgId = process.env.TELEGRAM_ADMIN_ID || null;
-
-      const result = await pool.query(`
-        SELECT username, first_name, COALESCE(wallet_balance::numeric, 0) AS amount
-        FROM users
-        WHERE banned = FALSE
-          AND COALESCE(wallet_balance::numeric, 0) > 0
-          AND ($1::text IS NULL OR CAST(telegram_id AS TEXT) != $1)
-        ORDER BY COALESCE(wallet_balance::numeric, 0) DESC
-        LIMIT 10
-      `, [adminTgId]);
-
-      const rows = result.rows.map((r: any, i: number) => ({
-        rank: i + 1,
-        username: r.username || null,
-        firstName: r.first_name || 'Anonymous',
-        amount: Number(r.amount) || 0,
-      }));
-
-      let myRank = null;
-      if (userId) {
-        const rankResult = await pool.query(`
-          SELECT sub.rank, sub.username, sub.first_name, sub.amount
-          FROM (
-            SELECT id, username, first_name,
-              COALESCE(wallet_balance::numeric, 0) AS amount,
-              RANK() OVER (ORDER BY COALESCE(wallet_balance::numeric, 0) DESC) AS rank
-            FROM users
-            WHERE banned = FALSE
-              AND ($1::text IS NULL OR CAST(telegram_id AS TEXT) != $1)
-          ) sub
-          WHERE sub.id = $2
-        `, [adminTgId, userId]);
-        if (rankResult.rows.length > 0) {
-          const r = rankResult.rows[0];
-          myRank = { rank: Number(r.rank), username: r.username || null, firstName: r.first_name || 'Anonymous', amount: Number(r.amount) || 0 };
-        }
-      }
-
-      return res.json({ leaderboard: rows, myRank });
-    } catch (error) {
-      console.error('AXN holders leaderboard error:', error);
+      console.error('NFT holders leaderboard error:', error);
       return res.status(500).json({ message: 'Internal server error' });
     }
   });
@@ -2428,7 +2266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Referral stats endpoint - auth removed to prevent popup spam on affiliates page
+  // Invite & Earn stats: all rewards are credited automatically.
   app.get('/api/referrals/stats', async (req: any, res) => {
     try {
       // Get userId from session or req.user (lenient check)
@@ -2439,97 +2277,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ 
           success: true, 
           skipAuth: true, 
-          totalInvites: 0,
-          successfulInvites: 0,
-          totalClaimed: '0', 
-          availableBonus: '0', 
-          readyToClaim: '0',
-          totalBugEarned: 0,
-          totalUsdEarned: 0
+          friendsInvited: 0,
+          commissionEarned: 0,
         });
       }
-      const user = await storage.getUser(userId);
-      
-      // Get TOTAL invites (all users invited, regardless of status)
-      const totalInvitesCount = await storage.getTotalInvitesCount(userId);
-      
-      // Get SUCCESSFUL invites (users who watched 1+ ad AND are not banned)
-      const successfulInvitesCount = await storage.getValidReferralCount(userId);
-      
-      // CRITICAL FIX: Calculate from stored historical referral rewards, NOT current admin settings
-      // This ensures admin setting changes do NOT retroactively change past earnings
-      const completedReferrals = await db
-        .select()
-        .from(referrals)
-        .where(and(
-          eq(referrals.referrerId, userId),
-          eq(referrals.status, 'completed')
-        ));
-      
-      // Sum all historical rewards stored at time of earning
-      let totalUsdEarned = 0;
-      let totalBugEarned = 0;
-      for (const ref of completedReferrals) {
-        totalUsdEarned += parseFloat(ref.tonRewardAmount || '0');
-        totalBugEarned += parseFloat(ref.bugRewardAmount || '0');
-      }
-      
-      // Fallback to admin settings for pending referrals (not yet earned)
-      // This ensures consistency but doesn't affect already-completed earnings
-      const pendingCount = Math.max(0, successfulInvitesCount - completedReferrals.length);
+      const friendsResult = await db.execute(sql`
+        SELECT COUNT(*)::int AS count
+        FROM referrals r
+        JOIN users u ON u.id = r.referee_id
+        WHERE r.referrer_id = ${userId}
+          AND u.banned = FALSE
+      `);
+      const commissionResult = await db.execute(sql`
+        SELECT COALESCE(SUM(amount::numeric), 0) AS total
+        FROM earnings
+        WHERE user_id = ${userId}
+          AND source IN ('referral_milestone', 'referral_deposit_commission')
+      `);
       
       res.json({
-        totalInvites: totalInvitesCount,
-        successfulInvites: successfulInvitesCount,
-        totalClaimed: user?.totalClaimedReferralBonus || '0',
-        availableBonus: user?.pendingReferralBonus || '0',
-        readyToClaim: user?.pendingReferralBonus || '0',
-        totalBugEarned: totalBugEarned,
-        totalUsdEarned: totalUsdEarned
+        friendsInvited: Number((friendsResult.rows[0] as any)?.count || 0),
+        commissionEarned: Number((commissionResult.rows[0] as any)?.total || 0),
       });
     } catch (error) {
       console.error("Error fetching referral stats:", error);
       res.status(500).json({ message: "Failed to fetch referral stats" });
-    }
-  });
-
-  // Claim referral bonus endpoint - auth removed to prevent popup spam on affiliates page
-  app.post('/api/referrals/claim', async (req: any, res) => {
-    try {
-      // Get userId from session or req.user (lenient check)
-      const userId = req.session?.user?.user?.id || req.user?.user?.id;
-      
-      if (!userId) {
-        console.log('⚠️ Referral claim requested without session - skipping');
-        return res.json({ success: true, skipAuth: true });
-      }
-      const result = await (storage as any).claimReferralBonus(userId);
-      
-      if (result.success) {
-        res.json(result);
-      } else {
-        res.status(400).json(result);
-      }
-    } catch (error) {
-      console.error("Error claiming referral bonus:", error);
-      res.status(500).json({ message: "Failed to claim referral bonus" });
-    }
-  });
-
-  // Get valid referral count (friends who watched at least 1 ad)
-  app.get('/api/referrals/valid-count', async (req: any, res) => {
-    try {
-      const userId = req.session?.user?.user?.id || req.user?.user?.id;
-      
-      if (!userId) {
-        return res.json({ validReferralCount: 0 });
-      }
-      
-      const validCount = await storage.getValidReferralCount(userId);
-      res.json({ validReferralCount: validCount });
-    } catch (error) {
-      console.error("Error fetching valid referral count:", error);
-      res.status(500).json({ message: "Failed to fetch valid referral count" });
     }
   });
 
@@ -2770,8 +2542,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         referredBy: referredBy,
         counts: {
           totalEarnings: userEarnings.length,
-          referralEarnings: userEarnings.filter(e => e.source === 'referral').length,
-          commissionEarnings: userEarnings.filter(e => e.source === 'referral_commission').length,
+          referralEarnings: userEarnings.filter(e => e.source === 'referral_milestone').length,
+          commissionEarnings: userEarnings.filter(e => e.source === 'referral_deposit_commission').length,
           adEarnings: userEarnings.filter(e => e.source === 'ad_watch').length
         }
       });
@@ -3489,7 +3261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalReferralEarningsResult = await db
         .select({ total: sql<string>`COALESCE(SUM(${earnings.amount}), '0')` })
         .from(earnings)
-        .where(sql`${earnings.source} IN ('referral', 'referral_commission')`);
+        .where(sql`${earnings.source} IN ('referral_milestone', 'referral_deposit_commission')`);
       
       console.log('✅ Emergency referral repair completed successfully!');
       
@@ -3716,7 +3488,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         dailyAdLimit: parseInt(getSetting('daily_ad_limit', '500')),
         rewardPerAd: parseInt(getSetting('reward_per_ad', '2')),
-        affiliateCommission: parseFloat(getSetting('affiliate_commission', '10')),
         walletChangeFee: parseInt(getSetting('wallet_change_fee', '100')),
         minWithdrawalAmountTON: parseFloat(getSetting('minimum_withdrawal_ton', '0.5')),
         withdrawalFeeTON: parseFloat(getSetting('withdrawal_fee_ton', '5')),
@@ -3731,11 +3502,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         minimumClicks: parseInt(getSetting('minimum_clicks', '100')),
         minTradeAmount: parseInt(getSetting('min_trade_amount', '1000')),
         seasonBroadcastActive: getSetting('season_broadcast_active', 'false') === 'true',
-        referralRewardEnabled: getSetting('referral_reward_enabled', 'false') === 'true',
-        referralRewardTON: parseFloat(getSetting('referral_reward_usd', '0.0005')),
-        referralRewardAXN: parseInt(getSetting('referral_reward_axn', '50')),
-        referralAdsRequired: parseInt(getSetting('referral_ads_required', '10')),
-        referralBoostPerInvite: parseFloat(getSetting('referral_boost_per_invite', '0.02')),
         streakReward: parseInt(getSetting('streak_reward', '100')),
         shareTaskReward: parseInt(getSetting('share_task_reward', '1000')),
         communityTaskReward: parseInt(getSetting('community_task_reward', '1000')),
@@ -3785,7 +3551,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settingMap: Record<string, string> = {
         dailyAdLimit: 'daily_ad_limit',
         rewardPerAd: 'reward_per_ad',
-        affiliateCommission: 'affiliate_commission',
         walletChangeFee: 'wallet_change_fee',
         minimum_withdrawal_ton: 'minimum_withdrawal_ton',
         withdrawal_fee_ton: 'withdrawal_fee_ton',
@@ -3799,11 +3564,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         minimumConvertAXN: 'minimum_convert_pad',
         minimumClicks: 'minimum_clicks',
         seasonBroadcastActive: 'season_broadcast_active',
-        referralRewardEnabled: 'referral_reward_enabled',
-        referralRewardTON: 'referral_reward_usd',
-        referralRewardAXN: 'referral_reward_axn',
-        referralAdsRequired: 'referral_ads_required',
-        referralBoostPerInvite: 'referral_boost_per_invite',
         streakReward: 'streak_reward',
         shareTaskReward: 'share_task_reward',
         communityTaskReward: 'community_task_reward',
@@ -3870,7 +3630,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settingMap: Record<string, string> = {
         dailyAdLimit: 'daily_ad_limit',
         rewardPerAd: 'reward_per_ad',
-        affiliateCommission: 'affiliate_commission',
         walletChangeFee: 'wallet_change_fee',
         minimum_withdrawal_ton: 'minimum_withdrawal_ton',
         withdrawal_fee_ton: 'withdrawal_fee_ton',
@@ -3884,11 +3643,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         minimumConvertAXN: 'minimum_convert_pad',
         minimumClicks: 'minimum_clicks',
         seasonBroadcastActive: 'season_broadcast_active',
-        referralRewardEnabled: 'referral_reward_enabled',
-        referralRewardTON: 'referral_reward_usd',
-        referralRewardAXN: 'referral_reward_axn',
-        referralAdsRequired: 'referral_ads_required',
-        referralBoostPerInvite: 'referral_boost_per_invite',
         streakReward: 'streak_reward',
         shareTaskReward: 'share_task_reward',
         communityTaskReward: 'community_task_reward',
@@ -7504,6 +7258,15 @@ ${walletAddress}
               transactionHash: webhook.transaction_hash,
             },
           });
+
+          // ArcPay deposits arrive in TON. Convert to the app's CIPHER unit
+          // (100,000 CIPHER = 1 TON), then credit the referrer 5%.
+          try {
+            await creditReferralDepositCommission(userId, Number(tonAmount), String(order_id));
+          } catch (commissionError) {
+            // Do not fail the user's deposit if the referral credit needs a retry.
+            console.error('❌ Referral deposit commission error:', commissionError);
+          }
 
           console.log(`💚  balance updated for user ${userId}: +${tonAmount} (Total: ${newTon})`);
 

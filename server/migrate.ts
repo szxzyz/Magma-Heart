@@ -455,6 +455,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
       await db.execute(sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS ton_reward_amount DECIMAL(30, 10) DEFAULT '0'`);
       await db.execute(sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS bug_reward_amount DECIMAL(30, 10) DEFAULT '0'`);
       await db.execute(sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`);
+      await db.execute(sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referral_reward_granted BOOLEAN DEFAULT FALSE`);
+      await db.execute(sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS deposit_commission_earned DECIMAL(30, 10) DEFAULT '0'`);
       console.log('✅ [MIGRATION] Referral reward columns ensured');
     } catch (error) {
       console.log('ℹ️ [MIGRATION] Referral reward columns already exist');
