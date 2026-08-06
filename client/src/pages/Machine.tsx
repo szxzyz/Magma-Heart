@@ -133,7 +133,7 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
         <div style={{
           background: "rgba(255,255,255,0.07)", borderRadius: 14, padding: 16, marginBottom: 16,
         }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 14 }}>{machine.name}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 14, textAlign: "center" }}>{machine.name}</div>
           {[
             { label: "Price",     value: `${machine.priceCipher.toLocaleString()} CIPHER` },
             { label: "Duration",  value: `${machine.durationDays} days` },
@@ -168,23 +168,12 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 10 }}>
-          <button
-            onClick={onCancel}
-            style={{
-              flex: 1, height: 48, borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "transparent", color: "rgba(255,255,255,0.6)",
-              fontSize: 14, fontWeight: 700, cursor: "pointer",
-            }}
-          >
-            Cancel
-          </button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <button
             onClick={onConfirm}
             disabled={!canAfford || loading}
             style={{
-              flex: 2, height: 48, borderRadius: 12, border: "none",
+              width: "100%", height: 48, borderRadius: 12, border: "none",
               background: canAfford ? "linear-gradient(135deg, #2563eb, #3b82f6)" : "rgba(255,255,255,0.06)",
               color: canAfford ? "#fff" : "rgba(255,255,255,0.25)",
               fontSize: 14, fontWeight: 800,
@@ -194,6 +183,17 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
             }}
           >
             {loading ? "Buying…" : "Confirm Purchase"}
+          </button>
+          <button
+            onClick={onCancel}
+            style={{
+              width: "100%", height: 48, borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.1)",
+              background: "transparent", color: "rgba(255,255,255,0.6)",
+              fontSize: 14, fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            Cancel
           </button>
         </div>
     </PopupShell>
