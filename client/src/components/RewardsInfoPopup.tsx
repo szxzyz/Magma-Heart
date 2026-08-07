@@ -7,7 +7,7 @@ export default function RewardsInfoPopup({ onClose }: Props) {
     <PopupShell onClose={onClose}>
         <div style={{ color: "#fff", fontSize: 17, fontWeight: 900, marginBottom: 18 }}>Rewards Information</div>
         <div style={{ display: "grid", gap: 16, color: "rgba(255,255,255,0.48)", fontSize: 12, lineHeight: 1.5 }}>
-          <div><strong style={{ color: "#3b82f6" }}>Friend Reward</strong><br />Your referred friend must collect <strong style={{ color: "#fff" }}>100 AXN</strong>. Once they reach 100 AXN, you automatically receive <strong style={{ color: "#fff" }}>1,000 CIPHER</strong>.</div>
+          <div><strong style={{ color: "#3b82f6" }}>Friend Reward</strong><br />Your referred friend must collect <strong style={{ color: "#fff" }}>100 AXN</strong>. Once they reach 100 AXN, you automatically receive <strong style={{ color: "#fff" }}>0.01 GRAM</strong>.</div>
           <div><strong style={{ color: "#3b82f6" }}>Deposit Commission</strong><br />Earn <strong style={{ color: "#fff" }}>5%</strong> from every deposit made by your referred friends.</div>
           <div><strong style={{ color: "#3b82f6" }}>Automatic Rewards</strong><br />All referral rewards and deposit commissions are credited automatically. No manual claim is required.</div>
         </div>

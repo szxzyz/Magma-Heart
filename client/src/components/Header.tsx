@@ -24,7 +24,7 @@ const Header = forwardRef<HTMLDivElement, HeaderProps>(
 
     const { data: user } = useQuery<any>({ queryKey: ["/api/auth/user"], retry: false, staleTime: 0 });
 
-    const cipherBalance = Math.floor(parseFloat(user?.balance || '0'));
+    const gramBalance = parseFloat(user?.balance || '0');
 
     const firstName: string = user?.firstName || user?.username || "Miner";
     const profileImageUrl: string | null =
@@ -144,16 +144,14 @@ const Header = forwardRef<HTMLDivElement, HeaderProps>(
             </div>
           </div>
 
-          {/* Right — CIPHER balance */}
+          {/* Right — GRAM balance */}
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 7px 6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
-            <div style={{ width: 18, height: 18, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-              <img src="/cipher-icon.png" alt="CIPHER" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            </div>
             <span style={{ color: '#fff', fontSize: 15, fontWeight: 900, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-              {cipherBalance.toLocaleString()}
+              {gramBalance.toLocaleString(undefined, { maximumFractionDigits: 6 })}
             </span>
+            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: 800 }}>GRAM</span>
             <button
-              aria-label="Buy CIPHER"
+              aria-label="Buy GRAM"
               onClick={() => setDepositOpen(true)}
               className="active:scale-90 transition-transform"
               style={{

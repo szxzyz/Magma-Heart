@@ -6,8 +6,6 @@ import { apiRequest } from "@/lib/queryClient";
 import PopupShell from "@/components/PopupShell";
 
 const TREASURY = "UQDeroBz4zvOntJ4xuMdiwFtNddMhJ4cGxghF9B7fYz50q8b";
-const CIPHER_PER_GRAM = 100_000;
-
 type Props = { onClose: () => void };
 type Status = "idle" | "sending" | "verifying" | "success" | "error";
 
@@ -40,9 +38,9 @@ export default function DepositPopup({ onClose }: Props) {
   };
 
   const createDeposit = async () => {
-    const response = await apiRequest("POST", "/api/cipher-deposit/create", {
+    const response = await apiRequest("POST", "/api/gram-deposit/create", {
       walletAddress: connectedAddress,
-      cipherAmount: amount,
+      gramAmount: amount,
     });
     return response.json();
   };
@@ -53,7 +51,7 @@ export default function DepositPopup({ onClose }: Props) {
   // confirmed, and credited even if this popup is closed early.
   const waitForDeposit = async (depositId: string) => {
     for (let attempt = 0; attempt < 18; attempt += 1) {
-      const response = await apiRequest("GET", `/api/cipher-deposit/status/${depositId}`);
+      const response = await apiRequest("GET", `/api/gram-deposit/status/${depositId}`);
       const data = await response.json();
       if (data.success && data.status === "credited") return data;
       if (data.status === "failed") throw new Error(data.message || "Payment verification failed");
@@ -62,11 +60,11 @@ export default function DepositPopup({ onClose }: Props) {
     throw new Error("Payment is still pending. Keep the popup open and try again shortly.");
   };
 
-  const buyCipher = async () => {
+  const buyGram = async () => {
     if (!connectedAddress || status === "sending" || status === "verifying") return;
-    if (!/^[0-9]+$/.test(amount) || BigInt(amount) <= 0n) {
+    if (!/^(?:\d+)(?:\.\d{1,9})?$/.test(amount) || Number(amount) <= 0) {
       setStatus("error");
-      setMessage("Enter a whole CIPHER amount greater than 0.");
+      setMessage("Enter a GRAM amount greater than 0.");
       return;
     }
 
@@ -79,12 +77,12 @@ export default function DepositPopup({ onClose }: Props) {
         messages: [{ address: TREASURY, amount: purchase.tonAmountNano }],
       });
       // Payment sent — the backend now automatically verifies it on-chain,
-      // confirms it, credits the CIPHER balance, and creates the deposit
+      // confirms it, credits the GRAM balance, and creates the deposit
       // transaction record. We poll until that settlement completes.
       setStatus("verifying");
       const verified = await waitForDeposit(purchase.purchaseId);
       setStatus("success");
-      setMessage(`Balance updated with ${Number(verified.cipherAmount).toLocaleString()} CIPHER.`);
+      setMessage(`Deposit Successful: ${Number(verified.gramAmount).toLocaleString()} GRAM credited.`);
       // Refresh both the balance and the transaction history immediately so
       // the new deposit record and updated balance show up right away.
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
@@ -96,10 +94,6 @@ export default function DepositPopup({ onClose }: Props) {
   };
 
   const busy = status === "sending" || status === "verifying";
-  const grams = amount && /^[0-9]+$/.test(amount)
-    ? (Number(amount) / CIPHER_PER_GRAM).toFixed(6).replace(/\.?0+$/, "")
-    : "0";
-
   return (
     <PopupShell onClose={onClose} maxWidth={390} closeOnBackdrop={!busy}>
       <div
@@ -109,9 +103,9 @@ export default function DepositPopup({ onClose }: Props) {
         }}
       >
         <div style={{ color: "#fff", fontSize: 18, fontWeight: 900, letterSpacing: "0.02em" }}>
-          <span>BUY</span> <span style={{ color: "#3b82f6" }}>CIPHER</span>
+          <span>BUY</span> <span style={{ color: "#3b82f6" }}>GRAM</span>
         </div>
-        <div style={{ color: "#60a5fa", fontSize: 12, fontWeight: 700, marginTop: 5 }}>1 GRAM = 100,000 CIPHER</div>
+        <div style={{ color: "#60a5fa", fontSize: 12, fontWeight: 700, marginTop: 5 }}>Send the exact GRAM amount from your connected wallet</div>
 
         {connectedAddress ? (
           <div
@@ -147,16 +141,16 @@ export default function DepositPopup({ onClose }: Props) {
         )}
 
         <div style={{ marginTop: 14 }}>
-              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: 700, marginBottom: 7 }}>Amount of CIPHER</div>
+              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: 700, marginBottom: 7 }}>Amount of GRAM</div>
               <input
                 value={amount}
-                onChange={event => { setAmount(event.target.value.replace(/\D/g, "")); setStatus("idle"); setMessage(""); }}
+                 onChange={event => { setAmount(event.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1")); setStatus("idle"); setMessage(""); }}
                 disabled={!connectedAddress || busy || status === "success"}
                 inputMode="numeric"
-                placeholder="Enter CIPHER amount"
+                 placeholder="Enter GRAM amount"
                 style={{ width: "100%", boxSizing: "border-box", border: "none", outline: "none", borderRadius: 12, padding: "13px 14px", background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 13, opacity: connectedAddress ? 1 : 0.48 }}
               />
-              <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 10, marginTop: 7 }}>Required payment: {grams} GRAM</div>
+               <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 10, marginTop: 7 }}>Required payment: {amount || "0"} GRAM</div>
         </div>
 
         <div style={{ marginTop: 14, padding: "11px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 12, opacity: connectedAddress ? 1 : 0.55 }}>
@@ -193,11 +187,11 @@ export default function DepositPopup({ onClose }: Props) {
         ) : null}
 
         <button
-          onClick={buyCipher}
+           onClick={buyGram}
           disabled={!connectedAddress || !amount || busy || status === "success"}
           style={{ width: "100%", marginTop: 16, border: "none", borderRadius: 12, padding: "12px 0", background: connectedAddress && amount && !busy && status !== "success" ? "linear-gradient(135deg,#2563eb,#3b82f6)" : "rgba(255,255,255,0.07)", color: connectedAddress && amount && !busy && status !== "success" ? "#fff" : "rgba(255,255,255,0.25)", fontSize: 13, fontWeight: 800, cursor: connectedAddress && amount && !busy ? "pointer" : "not-allowed" }}
         >
-          {status === "success" ? "Balance Updated" : "Buy CIPHER"}
+           {status === "success" ? "Balance Updated" : "Buy GRAM"}
         </button>
         <style>{`@keyframes deposit-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
