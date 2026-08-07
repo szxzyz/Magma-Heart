@@ -52,15 +52,49 @@ export default function Games() {
 
   const botUsername = botInfo?.username || 'bot';
   const referralLink = user?.referralCode ? `https://t.me/${botUsername}?start=${user.referralCode}` : '';
+
+  // Friendly, human-readable labels for every AXN/CIPHER earning source so the
+  // "Source" column in the transaction history is meaningful instead of raw
+  // snake_case values from the database.
+  const SOURCE_LABELS: Record<string, string> = {
+    cipher_deposit: 'Deposit',
+    nft_reward: 'NFT Reward',
+    ad_watch: 'Ad Watch',
+    ad_slot_watch: 'Ad Watch',
+    task_share: 'Task Reward',
+    task_channel: 'Task Reward',
+    task_community: 'Task Reward',
+    task_claim: 'Task Reward',
+    task_completion: 'Task Reward',
+    daily_task_completion: 'Daily Task',
+    bonus_claim: 'Daily Bonus',
+    referral: 'Referral Reward',
+    referral_milestone: 'Referral Milestone',
+    referral_deposit_commission: 'Referral Commission',
+    referral_backfill: 'Referral Reward',
+    invite_friend: 'Referral Reward',
+    promo_code: 'Promo Code',
+    withdrawal: 'Withdrawal',
+  };
+  const getSourceLabel = (source?: string) => {
+    if (!source) return 'Balance Update';
+    return SOURCE_LABELS[source] || source.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  };
+
   const transactionHistory = [
     ...(transactionData?.transactions || []).map((transaction: any) => ({
       id: `transaction-${transaction.id}`,
       amount: transaction.amount,
-      label: transaction.description || transaction.source || transaction.type || 'Balance update',
-      status: transaction.type || 'completed',
+      label: getSourceLabel(transaction.source),
+      // Transaction rows are only ever written once an earning/deposit has
+      // actually been credited, so they are always "completed" — the raw
+      // `type` column (addition/credit) is an internal ledger field, not a
+      // user-facing status.
+      status: 'completed',
       createdAt: transaction.createdAt,
       kind: 'transaction' as const,
       source: transaction.source,
+      sourceLabel: getSourceLabel(transaction.source),
       rewardType: transaction.metadata?.rewardType,
     })),
     ...(transactionData?.withdrawals || []).map((withdrawal: any) => ({
@@ -71,6 +105,7 @@ export default function Games() {
       createdAt: withdrawal.createdAt,
       kind: 'withdrawal' as const,
       source: 'withdrawal',
+      sourceLabel: 'Withdrawal',
       rewardType: undefined,
     })),
   ].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -108,13 +143,26 @@ export default function Games() {
     if (activeTab === 'all') return true;
     if (activeTab === 'withdraw') return entry.kind === 'withdrawal';
     if (activeTab === 'deposit') return entry.source === 'cipher_deposit';
-    if (activeTab === 'axn') return entry.kind === 'transaction' && getEntryCurrency(entry) === 'AXN';
+    // AXN tab covers every AXN-denominated activity — claims, farming/NFT
+    // rewards, AXN-side referral rewards, AND AXN withdrawals (and AXN
+    // deposits, if any exist) — not just credit-type transactions.
+    if (activeTab === 'axn') return getEntryCurrency(entry) === 'AXN';
     if (activeTab === 'cipher') return entry.kind === 'transaction' && getEntryCurrency(entry) === 'CIPHER';
     return true;
   });
 
-  // Deposits and withdrawals share the same 100,000 : 1 AXN/CIPHER-to-GRAM rate.
-  const showGramValue = activeTab === 'withdraw' || activeTab === 'deposit';
+  // Deposits, withdrawals, and AXN entries all show their GRAM equivalent
+  // (same 100,000 : 1 AXN/CIPHER-to-GRAM rate) alongside amount/status/source.
+  const showGramValue = activeTab === 'withdraw' || activeTab === 'deposit' || activeTab === 'axn';
+
+  // Normalize the many raw status strings (pending/approved/rejected/failed/
+  // completed/credited/...) down to the three the AXN tab is expected to show.
+  const normalizeStatus = (raw?: string): 'Completed' | 'Pending' | 'Failed' => {
+    const s = String(raw || '').toLowerCase();
+    if (s.includes('reject') || s.includes('fail') || s.includes('cancel') || s.includes('expire')) return 'Failed';
+    if (s.includes('pending') || s.includes('processing') || s.includes('review')) return 'Pending';
+    return 'Completed';
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -319,8 +367,12 @@ export default function Games() {
           ) : (
             filteredTransactionHistory.map((entry, index) => {
               const isWithdrawal = entry.kind === 'withdrawal';
-              const status = String(entry.status || '').replace(/_/g, ' ');
+              const normalizedStatus = normalizeStatus(entry.status);
+              const statusColor = normalizedStatus === 'Failed' ? '#f87171' : normalizedStatus === 'Pending' ? '#fbbf24' : '#4ade80';
               const entryGram = showGramValue ? formatGram(axnToGram(Number(entry.amount || 0))) : null;
+              // The AXN tab needs type, amount, GRAM equivalent, date/time,
+              // status, and source all visible on each row.
+              const showSourceLine = activeTab === 'axn' && entry.sourceLabel && entry.sourceLabel !== entry.label;
               return (
                 <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 16px', borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)' }}>
                   {isWithdrawal
@@ -331,15 +383,15 @@ export default function Games() {
                     <div style={{ color: '#fff', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</div>
                     <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 3 }}>
                       {entry.createdAt ? new Date(entry.createdAt).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      {showSourceLine ? ` · ${entry.sourceLabel}` : ''}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ color: isWithdrawal ? '#fff' : '#3b82f6', fontSize: 13, fontWeight: 900 }}>{isWithdrawal ? '-' : '+'}{Number(entry.amount || 0).toLocaleString()} {getEntryCurrency(entry)}</div>
                     {entryGram ? (
                       <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 3 }}>≈ {entryGram} GRAM</div>
-                    ) : (
-                      <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, marginTop: 3, textTransform: 'capitalize' }}>{status}</div>
-                    )}
+                    ) : null}
+                    <div style={{ color: statusColor, fontSize: 10, marginTop: 3, fontWeight: 700 }}>{normalizedStatus}</div>
                   </div>
                 </div>
               );
