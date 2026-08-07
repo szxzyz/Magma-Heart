@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 import PopupShell from "@/components/PopupShell";
 
 const TREASURY = "UQDeroBz4zvOntJ4xuMdiwFtNddMhJ4cGxghF9B7fYz50q8b";
+const MIN_GRAM_AMOUNT = 0.1;
 type Props = { onClose: () => void };
 type Status = "idle" | "sending" | "verifying" | "success" | "error";
 
@@ -65,6 +66,11 @@ export default function DepositPopup({ onClose }: Props) {
     if (!/^(?:\d+)(?:\.\d{1,9})?$/.test(amount) || Number(amount) <= 0) {
       setStatus("error");
       setMessage("Enter a GRAM amount greater than 0.");
+      return;
+    }
+    if (Number(amount) < MIN_GRAM_AMOUNT) {
+      setStatus("error");
+      setMessage(`Minimum deposit is ${MIN_GRAM_AMOUNT} GRAM.`);
       return;
     }
 
@@ -150,7 +156,7 @@ export default function DepositPopup({ onClose }: Props) {
                  placeholder="Enter GRAM amount"
                 style={{ width: "100%", boxSizing: "border-box", border: "none", outline: "none", borderRadius: 12, padding: "13px 14px", background: "rgba(255,255,255,0.07)", color: "#fff", fontSize: 13, opacity: connectedAddress ? 1 : 0.48 }}
               />
-               <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 10, marginTop: 7 }}>Required payment: {amount || "0"} GRAM</div>
+               <div style={{ color: "rgba(255,255,255,0.38)", fontSize: 10, marginTop: 7 }}>Required payment: {amount || "0"} GRAM · Minimum {MIN_GRAM_AMOUNT} GRAM</div>
         </div>
 
         <div style={{ marginTop: 14, padding: "11px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 12, opacity: connectedAddress ? 1 : 0.55 }}>
