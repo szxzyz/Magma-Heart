@@ -107,11 +107,16 @@ async function establishCurrencySource(): Promise<CurrencySource> {
 
 export async function ensureDatabaseSchema(): Promise<void> {
   if (process.env.DATABASE_URL) {
+    // Same reasoning as server/db.ts: Render's Postgres (and most managed
+    // Postgres reached over a private network) uses a self-signed cert.
+    const migrationSslConfig = process.env.DATABASE_URL?.includes('sslmode=disable')
+      ? false
+      : process.env.DATABASE_SSL_CA
+        ? { ca: process.env.DATABASE_SSL_CA, rejectUnauthorized: true }
+        : { rejectUnauthorized: false };
     const client = new Client({
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_SSL_CA
-        ? { ca: process.env.DATABASE_SSL_CA, rejectUnauthorized: true }
-        : { rejectUnauthorized: true }
+      ssl: migrationSslConfig
     });
     try {
       await client.connect();

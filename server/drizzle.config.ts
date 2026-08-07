@@ -21,11 +21,13 @@ function getSSLConfig() {
       : { rejectUnauthorized: true };
   }
   
-  // For other cloud databases in production
+  // Render's own Postgres (and most other managed Postgres reached over a
+  // private network) presents a self-signed certificate, so don't reject
+  // it unless a CA was explicitly supplied.
   if (databaseUrl?.includes('render.com') || process.env.NODE_ENV === 'production') {
     return process.env.DATABASE_SSL_CA
       ? { ca: process.env.DATABASE_SSL_CA, rejectUnauthorized: true }
-      : { rejectUnauthorized: true };
+      : { rejectUnauthorized: false };
   }
   
   // For local development, disable SSL by default
