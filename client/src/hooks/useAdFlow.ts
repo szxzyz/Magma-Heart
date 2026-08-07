@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 
 declare global {
   interface Window {
-    show_10963365: (type?: string | { type: string; inAppSettings: any }) => Promise<void>;
+    show_10963365: (type?: any) => Promise<void>;
   }
 }
 

@@ -7,6 +7,9 @@ async function throwIfResNotOk(res: Response) {
       const json = JSON.parse(text);
       throw new Error(json.message || text);
     } catch (parseError) {
+      if (parseError instanceof Error && parseError.message !== text) {
+        throw parseError;
+      }
       throw new Error(text);
     }
   }
@@ -133,8 +136,9 @@ export const queryClient = new QueryClient({
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      refetchOnWindowFocus: true, // Refetch on focus for instant updates
+      staleTime: 0, // No stale time - always fetch fresh data
+      gcTime: 1000 * 60 * 5, // 5 minutes garbage collection
       retry: false,
     },
   },

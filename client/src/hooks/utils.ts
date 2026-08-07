@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { Hrum_TO_TON, padTo } from "@shared/constants"
+import { Hrum_TO_TON, padTo, padToTON } from "@shared/constants"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
