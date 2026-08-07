@@ -3263,6 +3263,9 @@ export class DatabaseStorage implements IStorage {
 
       const now = new Date();
       let totalFlooredAxn = 0;
+      // Track per-machine claimed amounts so each NFT's reward is recorded as
+      // its own AXN transaction (source visible in the AXN history tab).
+      const claimedByMachine: { machineId: string; machineTypeId: string; machineName: string; amount: number }[] = [];
 
       for (const row of machines) {
         const machineType = getMachineType(row.machine_type);
@@ -3295,6 +3298,12 @@ export class DatabaseStorage implements IStorage {
         );
 
         totalFlooredAxn += flooredReward;
+        claimedByMachine.push({
+          machineId: row.id,
+          machineTypeId: machineType.id,
+          machineName: machineType.name,
+          amount: flooredReward,
+        });
       }
 
       if (totalFlooredAxn < 1) {
@@ -3310,6 +3319,30 @@ export class DatabaseStorage implements IStorage {
          WHERE id = $2`,
         [totalFlooredAxn, userId]
       );
+
+      // Record every claimed machine's reward as its own AXN transaction so it
+      // shows up in the AXN / All transaction history tabs (source = NFT reward).
+      for (const claim of claimedByMachine) {
+        const earningResult = await client.query(
+          `INSERT INTO earnings (user_id, amount, source, description)
+           VALUES ($1, $2, 'nft_reward', $3)
+           RETURNING id`,
+          [userId, claim.amount, `${claim.machineName} NFT reward claim`],
+        );
+        await client.query(
+          `INSERT INTO transactions (user_id, amount, type, source, description, metadata)
+           VALUES ($1, $2, 'addition', 'nft_reward', $3,
+                   jsonb_build_object('rewardType', 'AXN', 'machineId', $4, 'machineType', $5, 'earningId', $6))`,
+          [
+            userId,
+            claim.amount,
+            `${claim.machineName} farming reward claimed`,
+            claim.machineId,
+            claim.machineTypeId,
+            earningResult.rows[0]?.id,
+          ],
+        );
+      }
 
       await client.query('COMMIT');
       await this.checkAndGrantReferralMilestone(userId);
