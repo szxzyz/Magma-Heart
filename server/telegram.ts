@@ -35,7 +35,7 @@ export async function getBotUsername(): Promise<string> {
         _cachedBotUsername = data.result.username;
         _botUsernameFetchedAt = now;
         console.log(`✅ Bot username fetched from API: @${_cachedBotUsername}`);
-        return _cachedBotUsername;
+        return _cachedBotUsername!;
       }
     }
   } catch (error) {

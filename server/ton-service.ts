@@ -1,4 +1,4 @@
-import { WalletContractV5R1, Address, toNano, internal, beginCell, external, storeMessage } from '@ton/ton';
+import { WalletContractV5R1, Address, toNano, internal, beginCell, external, storeMessage, SendMode } from '@ton/ton';
 import { mnemonicToPrivateKey } from '@ton/crypto';
 
 const TREASURY_ADDRESS = 'UQDeroBz4zvOntJ4xuMdiwFtNddMhJ4cGxghF9B7fYz50q8b';
@@ -163,7 +163,7 @@ export async function checkPaymentReceived(
   }
 }
 
-// Exact TON deposit verification for CIPHER purchases. Unlike withdrawal-fee
+// Exact TON deposit verification for GRAM purchases. Unlike withdrawal-fee
 // detection above, this requires the exact nanoTON amount and sender wallet.
 export async function checkDepositPaymentReceived(
   userWalletAddress: string,
@@ -319,6 +319,7 @@ export async function sendAXNJetton(
     const transfer = wallet.createTransfer({
       seqno,
       secretKey: keyPair.secretKey,
+      sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
       messages: [
         internal({
           to: jettonWalletAddr,

@@ -27,20 +27,29 @@ const connectedUsers = new Map<string, { socket: WebSocket; userId: string }>();
 
 const AXN_PER_TON = 100_000;
 const REFERRAL_MILESTONE_AXN = 100;
-const REFERRAL_MILESTONE_REWARD_CIPHER = 1_000;
+const REFERRAL_MILESTONE_REWARD_GRAM = 0.01;
 const REFERRAL_DEPOSIT_COMMISSION_RATE = 0.05;
+
+function gramToNanoTon(amount: string): string {
+  const normalized = amount.trim();
+  if (!/^(?:\d+)(?:\.\d{1,9})?$/.test(normalized)) {
+    throw new Error('Invalid GRAM amount');
+  }
+  const [whole, fraction = ''] = normalized.split('.');
+  return (BigInt(whole) * 1_000_000_000n + BigInt(fraction.padEnd(9, '0'))).toString();
+}
 
 /**
  * Deposit payments arrive in TON, while referral rewards are credited to the
- * integer CIPHER balance. Convert the deposit before calculating 5%.
+ * GRAM balance. Convert the TON deposit to GRAM before calculating 5%.
  */
 async function creditReferralDepositCommission(
   referredUserId: string,
   tonAmount: number,
   orderId: string,
 ): Promise<void> {
-  const depositCipher = tonAmount * AXN_PER_TON;
-  const commission = Math.floor(depositCipher * REFERRAL_DEPOSIT_COMMISSION_RATE);
+  const depositGram = tonAmount;
+  const commission = depositGram * REFERRAL_DEPOSIT_COMMISSION_RATE;
   if (!Number.isFinite(commission) || commission <= 0) return;
 
   await db.transaction(async (tx) => {
@@ -102,7 +111,7 @@ async function creditReferralDepositCommission(
           'orderId', ${orderId},
           'referredUserId', ${referredUserId},
           'depositTon', ${tonAmount},
-          'depositCipher', ${depositCipher},
+          'depositGram', ${depositGram},
           'rate', ${REFERRAL_DEPOSIT_COMMISSION_RATE}
         )
       FROM earning_row
@@ -110,31 +119,50 @@ async function creditReferralDepositCommission(
   });
 }
 
+async function retryGramDepositCommission(deposit: {
+  id: string;
+  user_id: string;
+  ton_amount_nano: string | number;
+}): Promise<void> {
+  try {
+    await creditReferralDepositCommission(
+      deposit.user_id,
+      Number(deposit.ton_amount_nano) / 1e9,
+      `gram_deposit_${deposit.id}`,
+    );
+  } catch (error) {
+    // The deposit is already settled. Keep it credited and let the next
+    // status request or poller pass retry the idempotent commission.
+    console.error(`[GRAM-DEPOSIT] Referral commission retry failed for ${deposit.id}:`, error);
+  }
+}
+
 /**
- * Find and settle one CIPHER deposit intent. This is intentionally shared by
+ * Find and settle one GRAM deposit intent. This is intentionally shared by
  * the user status endpoint and the background poller so manual transfers do
  * not depend on the popup staying open.
  */
-async function settleCipherDeposit(depositId: string): Promise<{
+async function settleGramDeposit(depositId: string): Promise<{
   success: boolean;
   status: 'pending' | 'credited' | 'failed';
-  cipherAmount?: string;
+  gramAmount?: string;
   paymentHash?: string;
   message?: string;
 }> {
   const { pool } = await import('./db');
   const pendingResult = await pool.query(
-    `SELECT * FROM cipher_deposits WHERE id = $1`,
+    `SELECT * FROM gram_deposits WHERE id = $1`,
     [depositId],
   );
   const deposit = pendingResult.rows[0];
   if (!deposit) return { success: false, status: 'failed', message: 'Deposit request not found' };
   if (deposit.status === 'credited') {
-    return { success: true, status: 'credited', cipherAmount: String(deposit.cipher_amount), paymentHash: deposit.payment_hash };
+    await retryGramDepositCommission(deposit);
+    return { success: true, status: 'credited', gramAmount: String(deposit.gram_amount), paymentHash: deposit.payment_hash };
   }
   if (deposit.status !== 'pending' || new Date(deposit.expires_at).getTime() <= Date.now()) {
     await pool.query(
-      `UPDATE cipher_deposits SET status = 'failed' WHERE id = $1 AND status = 'pending'`,
+      `UPDATE gram_deposits SET status = 'failed' WHERE id = $1 AND status = 'pending'`,
       [deposit.id],
     );
     return { success: false, status: 'failed', message: 'Deposit request expired' };
@@ -153,8 +181,12 @@ async function settleCipherDeposit(depositId: string): Promise<{
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Serialize all deposit intents that could claim the same on-chain
+    // transaction. Locking only the current intent would allow a second
+    // pending intent to credit the same payment after the first completes.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [payment.txHash]);
     const lockedResult = await client.query(
-      `SELECT * FROM cipher_deposits WHERE id = $1 FOR UPDATE`,
+      `SELECT * FROM gram_deposits WHERE id = $1 FOR UPDATE`,
       [deposit.id],
     );
     const locked = lockedResult.rows[0];
@@ -164,16 +196,16 @@ async function settleCipherDeposit(depositId: string): Promise<{
     }
     if (locked.status === 'credited') {
       await client.query('COMMIT');
-      return { success: true, status: 'credited', cipherAmount: String(locked.cipher_amount), paymentHash: locked.payment_hash };
+      return { success: true, status: 'credited', gramAmount: String(locked.gram_amount), paymentHash: locked.payment_hash };
     }
 
     const duplicate = await client.query(
-      `SELECT id FROM cipher_deposits WHERE payment_hash = $1 AND id <> $2 LIMIT 1`,
+      `SELECT id FROM gram_deposits WHERE payment_hash = $1 AND id <> $2 LIMIT 1`,
       [payment.txHash, locked.id],
     );
     if (duplicate.rows.length > 0) {
       await client.query(
-        `UPDATE cipher_deposits SET status = 'failed' WHERE id = $1 AND status = 'pending'`,
+        `UPDATE gram_deposits SET status = 'failed' WHERE id = $1 AND status = 'pending'`,
         [locked.id],
       );
       await client.query('COMMIT');
@@ -188,7 +220,7 @@ async function settleCipherDeposit(depositId: string): Promise<{
            updated_at = NOW()
        WHERE id = $2
        RETURNING id`,
-      [locked.cipher_amount, locked.user_id],
+       [locked.gram_amount, locked.user_id],
     );
     if (updatedUser.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -197,33 +229,29 @@ async function settleCipherDeposit(depositId: string): Promise<{
 
     await client.query(
       `INSERT INTO earnings (user_id, amount, source, description)
-       VALUES ($1, $2, 'cipher_deposit', 'CIPHER deposit verified on-chain')`,
-      [locked.user_id, locked.cipher_amount],
+       VALUES ($1, $2, 'gram_deposit', 'GRAM deposit verified on-chain')`,
+      [locked.user_id, locked.gram_amount],
     );
     await client.query(
       `INSERT INTO transactions (user_id, amount, type, source, description, metadata)
-       VALUES ($1, $2, 'addition', 'cipher_deposit', 'CIPHER deposit credited',
+        VALUES ($1, $2, 'addition', 'gram_deposit', 'GRAM deposit credited',
                jsonb_build_object('depositId', $3, 'paymentHash', $4, 'tonAmountNano', $5,
                                    'walletAddress', $6))`,
-      [locked.user_id, locked.cipher_amount, locked.id, payment.txHash, locked.ton_amount_nano, locked.wallet_address],
+      [locked.user_id, locked.gram_amount, locked.id, payment.txHash, locked.ton_amount_nano, locked.wallet_address],
     );
     await client.query(
-      `UPDATE cipher_deposits
+      `UPDATE gram_deposits
        SET status = 'credited', payment_hash = $1, credited_at = NOW()
        WHERE id = $2`,
       [payment.txHash, locked.id],
     );
     await client.query('COMMIT');
 
-    await creditReferralDepositCommission(
-      locked.user_id,
-      Number(locked.ton_amount_nano) / 1e9,
-      `cipher_deposit_${locked.id}`,
-    );
+    await retryGramDepositCommission(locked);
     return {
       success: true,
       status: 'credited',
-      cipherAmount: String(locked.cipher_amount),
+      gramAmount: String(locked.gram_amount),
       paymentHash: payment.txHash,
     };
   } catch (error) {
@@ -342,10 +370,11 @@ const isAdmin = (telegramId: string): boolean => {
   }
   // Ensure both values are strings for comparison
   const idStr = telegramId.toString();
-  return adminId.toString() === idStr || idStr === '123456789';
+  return adminId.toString() === idStr;
 };
 
-// Admin authentication middleware with optional signature verification
+// Admin authentication middleware. Telegram signatures are mandatory for
+// every environment where admin actions are available.
 const authenticateAdmin = async (req: any, res: any, next: any) => {
   try {
     const telegramData = req.headers['x-telegram-data'] || req.query.tgData;
@@ -354,50 +383,16 @@ const authenticateAdmin = async (req: any, res: any, next: any) => {
 
     console.log(`🔍 Admin auth check: TELEGRAM_ADMIN_ID=${adminId}`);
 
-    // Development mode: Allow admin access for test user or if explicitly configured
-    if (process.env.NODE_ENV === 'development' && (!telegramData || adminId === '123456789')) {
-      console.log('🔧 Development mode: Granting admin access');
-      req.user = { 
-        telegramUser: { 
-          id: adminId || '123456789',
-          username: 'admin',
-          first_name: 'Admin',
-          last_name: 'User'
-        } 
-      };
-      return next();
-    }
-    
-    if (!telegramData) {
-      console.log('❌ Admin auth failed: No Telegram data in request');
-      return res.status(401).json({ message: "Admin access denied - no authentication data" });
+    if (!telegramData || !botToken || !adminId) {
+      console.log('❌ Admin auth failed: Telegram data, bot token, or admin ID is missing');
+      return res.status(401).json({ message: "Admin access denied - verified Telegram authentication is required" });
     }
 
-    // Parse and verify Telegram data
-    let telegramUser;
-    if (botToken) {
-      try {
-        const { verifyTelegramWebAppData } = await import('./auth');
-        const { isValid, user: verifiedUser } = verifyTelegramWebAppData(telegramData, botToken);
-        
-        if (isValid && verifiedUser) {
-          telegramUser = verifiedUser;
-        }
-      } catch (e) {
-        console.warn("Signature verification failed, falling back to parsing");
-      }
-    }
-
-    if (!telegramUser) {
-      try {
-        const urlParams = new URLSearchParams(telegramData);
-        const userString = urlParams.get('user');
-        if (userString) {
-          telegramUser = JSON.parse(userString);
-        }
-      } catch (e) {
-        console.error("Failed to parse telegram user data:", e);
-      }
+    const { verifyTelegramWebAppData } = await import('./auth');
+    const { isValid, user: telegramUser } = verifyTelegramWebAppData(telegramData, botToken);
+    if (!isValid || !telegramUser) {
+      console.log('❌ Admin auth failed: Invalid Telegram signature');
+      return res.status(401).json({ message: "Admin access denied - Telegram authentication could not be verified" });
     }
 
     if (!telegramUser || !isAdmin(telegramUser.id.toString())) {
@@ -687,9 +682,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) return res.status(401).json({ message: "Not authenticated" });
 
       const providerConfig: Record<string, { slot: number; reward: number; dailyLimit: number }> = {
-        Monetag: { slot: 1, reward: 500, dailyLimit: 10 },
-        AdsGram: { slot: 2, reward: 700, dailyLimit: 10 },
-        Gigapub: { slot: 3, reward: 500, dailyLimit: 10 },
+        Monetag: { slot: 1, reward: 0.005, dailyLimit: 10 },
+        AdsGram: { slot: 2, reward: 0.007, dailyLimit: 10 },
+        Gigapub: { slot: 3, reward: 0.005, dailyLimit: 10 },
       };
 
       await db.execute(sql`
@@ -745,9 +740,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Provider slots use independent 10-ad daily limits.
       const AD_SLOT_CONFIG: Record<number, { reward: number; dailyLimit: number }> = {
-        1: { reward: 500, dailyLimit: 10 },
-        2: { reward: 700, dailyLimit: 10 },
-        3: { reward: 500, dailyLimit: 10 },
+        1: { reward: 0.005, dailyLimit: 10 },
+        2: { reward: 0.007, dailyLimit: 10 },
+        3: { reward: 0.005, dailyLimit: 10 },
       };
       const config = AD_SLOT_CONFIG[slot];
       if (!config) return res.status(400).json({ message: "Invalid ad slot" });
@@ -810,7 +805,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         newBalance: updatedUser?.balance,
-        rewardAXN: config.reward,
+        rewardGram: config.reward,
         slot,
         currentCount: newCount,
         dailyLimit: config.dailyLimit,
@@ -914,13 +909,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/daily-checkin — claim 100 CIPHER daily bonus
+  // POST /api/daily-checkin — claim 0.001 GRAM daily bonus
   app.post('/api/daily-checkin', authenticateTelegram, async (req: any, res) => {
     try {
       const user = req.user.user;
       const { pool: dbPool } = await import('./db');
       const todayKey = new Date().toISOString().slice(0, 10);
-      const reward = 100;
+      const reward = 0.001;
 
       // Single atomic conditional UPDATE: prevents concurrent double-claims.
       const result = await dbPool.query(
@@ -946,14 +941,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ success: false, message: 'Already claimed today' });
       }
 
-      res.json({ success: true, reward, message: `Daily check-in! +${reward} CIPHER` });
+      res.json({ success: true, reward, message: `Daily check-in! +${reward} GRAM` });
     } catch (error) {
       console.error('Daily checkin error:', error);
       res.status(500).json({ success: false, message: 'Failed to claim daily check-in' });
     }
   });
 
-  // POST /api/mystery-box — claim random CIPHER (1–1000), up to 5 times per day
+  // POST /api/mystery-box — claim random GRAM (0.00001–0.01), up to 5 times per day
   app.post('/api/mystery-box', authenticateTelegram, async (req: any, res) => {
     try {
       const user = req.user.user;
@@ -961,7 +956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const todayKey = new Date().toISOString().slice(0, 10);
       const DAILY_LIMIT = 5;
 
-      const reward = Math.floor(Math.random() * 1000) + 1;
+      const reward = (Math.floor(Math.random() * 1000) + 1) / 100_000;
 
       // Single atomic conditional UPDATE: enforces the daily limit and increments
       // the counter in one statement, so concurrent requests cannot exceed 5/day.
@@ -995,7 +990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reward,
         claimsToday: newCount,
         remaining: Math.max(0, DAILY_LIMIT - newCount),
-        message: `You won ${reward} CIPHER from the mystery gift!`,
+        message: `You won ${reward} GRAM from the mystery gift!`,
       });
     } catch (error) {
       console.error('Mystery box error:', error);
@@ -1366,13 +1361,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Ad Slots API ───
   const AD_SLOTS = [
-    { id: 1, reward: 10, maxWatches: 40, network: "monetag" },
-    { id: 2, reward: 15, maxWatches: 35, network: "monetag" },
-    { id: 3, reward: 20, maxWatches: 25, network: "adsgram" },
-    { id: 4, reward: 8,  maxWatches: 50, network: "monetag" },
-    { id: 5, reward: 25, maxWatches: 15, network: "adsgram" },
-    { id: 6, reward: 12, maxWatches: 30, network: "monetag" },
-    { id: 7, reward: 18, maxWatches: 25, network: "adsgram" },
+    { id: 1, reward: 0.0001, maxWatches: 40, network: "monetag" },
+    { id: 2, reward: 0.00015, maxWatches: 35, network: "monetag" },
+    { id: 3, reward: 0.0002, maxWatches: 25, network: "adsgram" },
+    { id: 4, reward: 0.00008, maxWatches: 50, network: "monetag" },
+    { id: 5, reward: 0.00025, maxWatches: 15, network: "adsgram" },
+    { id: 6, reward: 0.00012, maxWatches: 30, network: "monetag" },
+    { id: 7, reward: 0.00018, maxWatches: 25, network: "adsgram" },
   ];
 
   app.get("/api/ad-slots", authenticateTelegram, async (req: any, res) => {
@@ -1389,7 +1384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const slots = AD_SLOTS.map(s => ({
         ...s,
         watchedCount: watchMap[s.id] ?? 0,
-        totalAxn: s.reward * s.maxWatches,
+        totalGram: s.reward * s.maxWatches,
       }));
       res.json({ slots });
     } catch (error) {
@@ -1452,13 +1447,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
            updated_at = NOW()`,
         [user.id, slotId]
       );
-      // Give 1 CIPHER for watching an ad slot
+      // Credit the GRAM earning balance for watching an ad slot.
       await pool.query(
-        `UPDATE users SET balance = COALESCE(balance::numeric, 0) + 1 WHERE id = $1`,
-        [user.id]
+        `UPDATE users SET balance = COALESCE(balance::numeric, 0) + $1 WHERE id = $2`,
+        [slot.reward, user.id]
       );
       const newCount = currentCount + 1;
-      res.json({ success: true, earned: 1, axnEarned: 1, watchedCount: newCount, maxWatches: slot.maxWatches });
+      res.json({ success: true, earned: slot.reward, gramEarned: slot.reward, watchedCount: newCount, maxWatches: slot.maxWatches });
     } catch (error) {
       console.error("Ad slot watch error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -1480,7 +1475,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const u = userRow.rows[0];
       if (!u) return res.status(404).json({ message: "User not found" });
 
-      // Reset daily flags if last claim was not today
       const lastDate = u.daily_tasks_date ? new Date(u.daily_tasks_date) : null;
       const today = new Date();
       const isNewDay = !lastDate ||
@@ -1500,14 +1494,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         invite: "daily_invite_claimed",
         updates: "daily_updates_claimed",
       };
-      const axnMap: Record<string, number> = { checkin: 5, invite: 50, updates: 5 };
-
+      const gramMap: Record<string, number> = { checkin: 0.00005, invite: 0.0005, updates: 0.00005 };
       const fieldName = claimedField[taskType];
       if (u[fieldName]) {
         return res.status(400).json({ success: false, message: "Already claimed today. Come back tomorrow!" });
       }
 
-      // Daily invite milestone: requires 3 friends who completed 10 ads today
       if (taskType === "invite") {
         const todayUTC = new Date();
         todayUTC.setUTCHours(0, 0, 0, 0);
@@ -1524,13 +1516,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const axnEarned = axnMap[taskType];
+      const gramEarned = gramMap[taskType];
       await pool.query(
         `UPDATE users SET ${fieldName} = TRUE, balance = COALESCE(balance::numeric, 0) + $1, daily_tasks_date = NOW() WHERE id = $2`,
-        [axnEarned, user.id]
+        [gramEarned, user.id]
       );
 
-      return res.json({ success: true, axnEarned, message: `+${axnEarned} AXN earned!` });
+      return res.json({ success: true, gramEarned, message: `+${gramEarned} GRAM earned!` });
     } catch (error) {
       console.error("Daily task claim error:", error);
       return res.status(500).json({ message: "Internal server error" });
@@ -1544,7 +1536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) return res.status(401).json({ message: "Not authenticated" });
       const { pool } = await import("./db");
       const [tasksRes, completedRes] = await Promise.all([
-        pool.query(`SELECT id, title, description, reward_axn, key_cost, url FROM bounty_tasks WHERE is_active = TRUE AND (is_paused IS NULL OR is_paused = FALSE) ORDER BY id ASC`),
+        pool.query(`SELECT id, title, description, reward_axn AS gram_reward, key_cost, url FROM bounty_tasks WHERE is_active = TRUE AND (is_paused IS NULL OR is_paused = FALSE) ORDER BY id ASC`),
         pool.query(`SELECT task_id FROM bounty_task_completions WHERE user_id = $1`, [user.id]),
       ]);
       const completedIds = new Set(completedRes.rows.map((r: any) => r.task_id));
@@ -1552,7 +1544,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: t.id,
         title: t.title,
         description: t.description,
-        rewardAxn: t.reward_axn,
+        gramReward: t.gram_reward,
         keyCost: t.key_cost,
         url: t.url,
         completed: completedIds.has(t.id),
@@ -1565,6 +1557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/bounty-tasks/:taskId/complete", authenticateTelegram, async (req: any, res) => {
+    let client: any;
     try {
       const user = req.user?.user;
       if (!user) return res.status(401).json({ message: "Not authenticated" });
@@ -1572,28 +1565,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(taskId)) return res.status(400).json({ message: "Invalid task ID" });
 
       const { pool } = await import("./db");
+      client = await pool.connect();
+      await client.query('BEGIN');
 
-      // Get task
-      const taskRes = await pool.query(`SELECT id, reward_axn, key_cost FROM bounty_tasks WHERE id = $1 AND is_active = TRUE`, [taskId]);
-      if (!taskRes.rows[0]) return res.status(404).json({ message: "Task not found" });
+      const taskRes = await client.query(
+        `SELECT id, reward_axn AS gram_reward
+         FROM bounty_tasks
+         WHERE id = $1
+           AND is_active = TRUE
+           AND COALESCE(is_paused, FALSE) = FALSE
+           AND (
+             total_impressions IS NULL
+             OR total_impressions <= 0
+             OR COALESCE(completed_count, 0) < total_impressions
+           )
+         FOR UPDATE`,
+        [taskId],
+      );
+      if (!taskRes.rows[0]) {
+        const exists = await client.query(`SELECT 1 FROM bounty_tasks WHERE id = $1`, [taskId]);
+        await client.query('ROLLBACK');
+        return res.status(exists.rows.length ? 400 : 404).json({
+          message: exists.rows.length ? "Task is paused or no longer available" : "Task not found",
+        });
+      }
       const task = taskRes.rows[0];
 
-      // Check not already completed
-      const alreadyRes = await pool.query(`SELECT 1 FROM bounty_task_completions WHERE user_id = $1 AND task_id = $2`, [user.id, taskId]);
-      if (alreadyRes.rows.length > 0) return res.status(400).json({ message: "Task already completed" });
-
-      // Add CIPHER reward and increment tasks_completed (no key cost)
-      await pool.query(
-        `UPDATE users SET balance = COALESCE(balance::numeric, 0) + $1, tasks_completed = COALESCE(tasks_completed, 0) + 1 WHERE id = $2`,
-        [task.reward_axn, user.id]
+      const completion = await client.query(
+        `INSERT INTO bounty_task_completions (user_id, task_id)
+         VALUES ($1, $2)
+         ON CONFLICT (user_id, task_id) DO NOTHING
+         RETURNING id`,
+        [user.id, taskId],
       );
-      await pool.query(`INSERT INTO bounty_task_completions (user_id, task_id) VALUES ($1, $2)`, [user.id, taskId]);
-      await pool.query(`UPDATE bounty_tasks SET completed_count = COALESCE(completed_count, 0) + 1 WHERE id = $1`, [taskId]);
+      if (completion.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: "Task already completed" });
+      }
 
-      return res.json({ success: true, axnEarned: task.reward_axn, message: `+${task.reward_axn} CIPHER earned!` });
+      const updatedTask = await client.query(
+        `UPDATE bounty_tasks
+         SET completed_count = COALESCE(completed_count, 0) + 1
+         WHERE id = $1
+           AND (
+             total_impressions IS NULL
+             OR total_impressions <= 0
+             OR COALESCE(completed_count, 0) < total_impressions
+           )
+         RETURNING id`,
+        [taskId],
+      );
+      if (updatedTask.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: "Task is no longer available" });
+      }
+
+      const updatedUser = await client.query(
+        `UPDATE users
+         SET balance = COALESCE(balance::numeric, 0) + $1,
+             tasks_completed = COALESCE(tasks_completed, 0) + 1
+         WHERE id = $2
+         RETURNING id`,
+        [task.gram_reward, user.id],
+      );
+      if (updatedUser.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: "User account not found" });
+      }
+
+      await client.query('COMMIT');
+      return res.json({ success: true, gramReward: task.gram_reward, message: `+${task.gram_reward} GRAM earned!` });
     } catch (error) {
+      if (client) {
+        try { await client.query('ROLLBACK'); } catch {}
+      }
       console.error("Bounty task complete error:", error);
       return res.status(500).json({ message: "Internal server error" });
+    } finally {
+      client?.release();
     }
   });
 
@@ -1817,7 +1866,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let sessionToken: string;
       
       // Development mode: Return predictable test token
-      if (process.env.NODE_ENV === 'development' || process.env.REPL_ID) {
+      if (process.env.NODE_ENV === 'development') {
         sessionToken = 'test-session';
         console.log('🔧 Development mode: Returning test session token');
       } else {
@@ -2167,14 +2216,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // AXN reward amount (no conversion needed - store AXN directly)
-      const adRewardAXN = rewardPerAdAXN;
+      // Older settings used the former 100,000-unit earning denomination.
+      // The canonical earning balance is now decimal GRAM.
+      const adRewardGram = rewardPerAdAXN > 1 ? rewardPerAdAXN / 100_000 : rewardPerAdAXN;
       
       try {
         // Process reward with error handling to ensure success response
         await storage.addEarning({
           userId,
-          amount: String(adRewardAXN),
+          amount: String(adRewardGram),
           source: 'ad_watch',
           description: 'Watched advertisement',
         });
@@ -2211,7 +2261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         sendRealtimeUpdate(userId, {
           type: 'ad_reward',
-          amount: adRewardAXN.toString(),
+          amount: adRewardGram.toString(),
           message: 'Ad reward earned!',
           timestamp: new Date().toISOString()
         });
@@ -2223,7 +2273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // ALWAYS return success response to ensure reward notification shows
       res.json({ 
         success: true, 
-        rewardAXN: adRewardAXN,
+        gramReward: adRewardGram,
         rewardBUG: bugRewardPerAd,
         newBalance: updatedUser?.walletBalance?.toString() || updatedUser?.balance || user.balance || "0",
         newBugBalance: updatedUser?.bugBalance || "0",
@@ -2236,10 +2286,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Return success anyway to prevent error notification from showing
       // The user watched the ad, so we should acknowledge it
-      const adRewardAXN = Math.round(parseFloat("0.00010000") * 10000000);
+      const adRewardGram = 0.0001;
       res.json({ 
         success: true, 
-        rewardAXN: adRewardAXN,
+        gramReward: adRewardGram,
         newBalance: "0",
         adsWatchedToday: 0,
         warning: "Reward processing encountered an issue but was acknowledged"
@@ -2604,7 +2654,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(and(
             eq(earnings.userId, userId),
             eq(earnings.source, 'ad_watch'),
-            gte(earnings.createdAt, lastWithdrawalDate)
+            ...(lastWithdrawalDate ? [gte(earnings.createdAt, lastWithdrawalDate)] : [])
           ));
         
         adsWatchedSinceLastWithdrawal = adsCountResult[0]?.count || 0;
@@ -2976,8 +3026,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bugReward = parseInt(bugRewardSetting);
       
       await db.transaction(async (tx) => {
-        // All task rewards go to CIPHER (balance). AXN is farming-only.
-        // Mark task complete and credit BUG only; addEarning below handles CIPHER balance
+        // Task rewards go to the GRAM earning balance. AXN is farming-only.
+        // Mark task complete and credit BUG only; addEarning handles GRAM.
         await tx.update(users)
           .set({ 
             bugBalance: sql`COALESCE(${users.bugBalance}, '0')::numeric + ${bugReward}`,
@@ -2986,7 +3036,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .where(eq(users.id, userId));
         
-        // Add earning record (also updates CIPHER balance)
+        // Add earning record (also updates the GRAM balance)
         await storage.addEarning({
           userId,
           amount: rewardAmount,
@@ -3140,10 +3190,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const rewardAmount = '1000';
+      const rewardAmount = '0.01';
       
       await db.transaction(async (tx) => {
-        // Mark task complete only; addEarning below handles CIPHER balance
+        // Mark task complete only; addEarning handles the GRAM balance
         await tx.update(users)
           .set({ 
             taskChannelCompletedToday: true,
@@ -3151,7 +3201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .where(eq(users.id, userId));
         
-        // Add earning record (also updates CIPHER balance)
+        // Add earning record (also updates the GRAM balance)
         await storage.addEarning({
           userId,
           amount: rewardAmount,
@@ -3217,10 +3267,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const rewardAmount = '1000';
+      const rewardAmount = '0.01';
       
       await db.transaction(async (tx) => {
-        // Mark task complete only; addEarning below handles CIPHER balance
+        // Mark task complete only; addEarning handles the GRAM balance
         await tx.update(users)
           .set({ 
             taskCommunityCompletedToday: true,
@@ -3228,7 +3278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .where(eq(users.id, userId));
         
-        // Add earning record (also updates CIPHER balance)
+        // Add earning record (also updates the GRAM balance)
         await storage.addEarning({
           userId,
           amount: rewardAmount,
@@ -3511,7 +3561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // One-time production database fix endpoint
   app.get('/api/fix-production-db', async (req: any, res) => {
     try {
-      const { fixProductionDatabase } = await import('../server/fix-production-db.js');
+      const { fixProductionDatabase } = await import('../fix-production-db.js');
       console.log('🔧 Running production database fix...');
       await fixProductionDatabase();
       res.json({ 
@@ -5657,21 +5707,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(desc(withdrawals.createdAt));
       
       const depositRows = await db.execute(sql`
-        SELECT id, cipher_amount, status, payment_hash, created_at, credited_at
-        FROM cipher_deposits
+        SELECT id, gram_amount, status, payment_hash, created_at, credited_at
+        FROM gram_deposits
         WHERE user_id = ${userId}
         ORDER BY created_at DESC
       `);
       const deposits = (depositRows.rows || []).map((deposit: any) => ({
-        id: `cipher-${deposit.id}`,
-        amount: deposit.cipher_amount,
-        method: 'CIPHER deposit',
+        id: `gram-${deposit.id}`,
+        amount: deposit.gram_amount,
+        method: 'GRAM deposit',
         status: deposit.status,
         details: deposit.payment_hash ? `Payment: ${deposit.payment_hash}` : 'Blockchain verification pending',
         transactionHash: deposit.payment_hash,
         createdAt: deposit.credited_at || deposit.created_at,
-        currency: 'CIPHER',
-        source: 'cipher_deposit',
+        currency: 'GRAM',
+        source: 'gram_deposit',
       }));
 
       res.json({ 
@@ -5909,7 +5959,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .where(and(
                 eq(earnings.userId, String(userId)),
                 eq(earnings.source, 'ad_watch'),
-                gte(earnings.createdAt, lastWithdrawalDate)
+                ...(lastWithdrawalDate ? [gte(earnings.createdAt, lastWithdrawalDate)] : [])
               ));
             adsWatchedSinceLastWithdrawal = adsCountResult[0]?.count || 0;
           }
@@ -7001,14 +7051,16 @@ ${walletAddress}
         });
       }
       
-      // Add reward based on type - AXN, TON,  supported (PDZ is deprecated, treated as )
+      // Add reward based on type. Legacy promo rows are normalized to GRAM
+      // during migration and are accepted here only as a one-way compatibility
+      // conversion, never returned as an active currency.
       let rewardType = promoCode.rewardType || 'AXN';
-      // Convert any legacy PDZ to TON
+      if (rewardType === 'CIPHER') rewardType = 'GRAM';
       if (rewardType === 'PDZ') rewardType = '';
       const rewardAmount = result.reward;
       
-      if (rewardType === 'CIPHER') {
-        // Add CIPHER balance (balance field, not wallet_balance) — exact integer amount
+      if (rewardType === 'GRAM') {
+        // Add GRAM balance (balance field, not wallet_balance).
         const rewardNum = parseFloat(rewardAmount || '0');
         const { pool } = await import('./db');
         await pool.query(
@@ -7021,16 +7073,16 @@ ${walletAddress}
           type: 'credit',
           source: 'promo_code',
           description: `Redeemed promo code: ${code}`,
-          metadata: { code, rewardType: 'CIPHER' }
+          metadata: { code, rewardType: 'GRAM' }
         });
         res.json({
           success: true,
-          message: `+${rewardNum} CIPHER added to your balance!`,
+          message: `+${rewardNum} GRAM added to your balance!`,
           reward: rewardAmount,
-          rewardType: 'CIPHER'
+          rewardType: 'GRAM'
         });
       } else if (rewardType === 'AXN') {
-        // Add AXN wallet_balance — direct SQL update (addEarning only touches CIPHER balance field)
+        // Add AXN wallet_balance directly; GRAM earnings use balance.
         const rewardNum = parseFloat(rewardAmount || '0');
         const { pool } = await import('./db');
         await pool.query(
@@ -7125,7 +7177,11 @@ ${walletAddress}
         });
       } else if (promoCode.rewardType === 'TON' && (promoCode.rewardCurrency === 'ton_app' || promoCode.rewardCurrency === 'App')) {
         // TON App Balance — treat as TON balance
-        const currentBalance = parseFloat(user.tonBalance || '0');
+        const [currentUser] = await db
+          .select({ tonBalance: users.tonBalance })
+          .from(users)
+          .where(eq(users.id, userId));
+        const currentBalance = parseFloat(currentUser?.tonBalance || '0');
         const newBalance = (currentBalance + parseFloat(rewardAmount || '0')).toFixed(6);
         
         await db
@@ -7208,9 +7264,13 @@ ${walletAddress}
       const userId = req.user.user.id;
       const user = await storage.getUser(userId);
       
-      // Check if user is admin
-      const isAdmin = user?.telegram_id === "6653616672" || (user?.telegram_id === "123456789" && process.env.NODE_ENV === 'development');
-      if (!isAdmin) {
+      // Check the same configured admin identity used by the signed admin
+      // middleware; never grant access to a hard-coded development account.
+      const configuredAdminId = process.env.TELEGRAM_ADMIN_ID;
+      const isConfiguredAdmin = Boolean(
+        configuredAdminId && user?.telegram_id === configuredAdminId,
+      );
+      if (!isConfiguredAdmin) {
         return res.status(403).json({ message: 'Unauthorized: Admin access required' });
       }
       
@@ -7474,8 +7534,7 @@ ${walletAddress}
             },
           });
 
-          // ArcPay deposits arrive in TON. Convert to the app's CIPHER unit
-          // (100,000 CIPHER = 1 TON), then credit the referrer 5%.
+          // ArcPay deposits arrive in TON; credit the referrer with 5% GRAM.
           try {
             await creditReferralDepositCommission(userId, Number(tonAmount), String(order_id));
           } catch (commissionError) {
@@ -8302,9 +8361,9 @@ ${walletAddress}
       const user = await storage.getUser(userId) as any;
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (user.missionLoginClaimed) return res.status(400).json({ error: 'Already claimed today' });
-      const reward = 2;
+      const reward = 0.00002;
       await db.execute(sql`UPDATE users SET mission_login_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + ${reward} WHERE id = ${userId}`);
-      res.json({ success: true, reward, message: `+${reward} CIPHER claimed!` });
+      res.json({ success: true, reward, gramReward: reward, message: `+${reward} GRAM claimed!` });
     } catch (err) {
       res.status(500).json({ error: 'Failed to claim' });
     }
@@ -8319,9 +8378,9 @@ ${walletAddress}
       const user = await storage.getUser(userId) as any;
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (user.missionAnnouncementClaimed) return res.status(400).json({ error: 'Already claimed today' });
-      const reward = 1;
+      const reward = 0.00001;
       await db.execute(sql`UPDATE users SET mission_announcement_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + ${reward} WHERE id = ${userId}`);
-      res.json({ success: true, reward, message: `+${reward} CIPHER claimed!` });
+      res.json({ success: true, reward, gramReward: reward, message: `+${reward} GRAM claimed!` });
     } catch (err) {
       res.status(500).json({ error: 'Failed to claim' });
     }
@@ -8336,9 +8395,9 @@ ${walletAddress}
       const user = await storage.getUser(userId) as any;
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (user.missionWatchAdClaimed) return res.status(400).json({ error: 'Already claimed today' });
-      const reward = 3;
+      const reward = 0.00003;
       await db.execute(sql`UPDATE users SET mission_watch_ad_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + ${reward} WHERE id = ${userId}`);
-      res.json({ success: true, reward, message: `+${reward} CIPHER claimed!` });
+      res.json({ success: true, reward, gramReward: reward, message: `+${reward} GRAM claimed!` });
     } catch (err) {
       res.status(500).json({ error: 'Failed to claim' });
     }
@@ -8353,9 +8412,9 @@ ${walletAddress}
       const user = await storage.getUser(userId) as any;
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (user.missionShareAppClaimed) return res.status(400).json({ error: 'Already claimed today' });
-      const reward = 5;
+      const reward = 0.00005;
       await db.execute(sql`UPDATE users SET mission_share_app_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + ${reward} WHERE id = ${userId}`);
-      res.json({ success: true, reward, message: `+${reward} CIPHER claimed!` });
+      res.json({ success: true, reward, gramReward: reward, message: `+${reward} GRAM claimed!` });
     } catch (err) {
       res.status(500).json({ error: 'Failed to claim' });
     }
@@ -8392,9 +8451,9 @@ ${walletAddress}
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (user.missionAppTimeClaimed) return res.status(400).json({ error: 'Already claimed today' });
       if ((user.missionAppTimeSeconds ?? 0) < 600) return res.status(400).json({ error: 'Not enough app time yet' });
-      const reward = 6;
+      const reward = 0.00006;
       await db.execute(sql`UPDATE users SET mission_app_time_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + ${reward} WHERE id = ${userId}`);
-      res.json({ success: true, reward, message: `+${reward} CIPHER claimed!` });
+      res.json({ success: true, reward, gramReward: reward, message: `+${reward} GRAM claimed!` });
     } catch (err) {
       res.status(500).json({ error: 'Failed to claim' });
     }
@@ -8409,9 +8468,9 @@ ${walletAddress}
       const user = await storage.getUser(userId) as any;
       if (!user) return res.status(404).json({ error: 'User not found' });
       if (user.missionCommunityClaimed) return res.status(400).json({ error: 'Already claimed today' });
-      const reward = 2;
+      const reward = 0.00002;
       await db.execute(sql`UPDATE users SET mission_community_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + ${reward} WHERE id = ${userId}`);
-      res.json({ success: true, reward, message: `+${reward} CIPHER claimed!` });
+      res.json({ success: true, reward, gramReward: reward, message: `+${reward} GRAM claimed!` });
     } catch (err) {
       res.status(500).json({ error: 'Failed to claim' });
     }
@@ -8431,9 +8490,9 @@ ${walletAddress}
       `);
       const hasNew = parseInt((referrals.rows[0] as any)?.cnt || '0') > 0;
       if (!hasNew) return res.status(400).json({ error: 'No new referral today' });
-      const reward = 50;
+      const reward = 0.0005;
       await db.execute(sql`UPDATE users SET mission_invite_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + ${reward} WHERE id = ${userId}`);
-      res.json({ success: true, reward, message: `+${reward} CIPHER claimed!` });
+      res.json({ success: true, reward, gramReward: reward, message: `+${reward} GRAM claimed!` });
     } catch (err) {
       res.status(500).json({ error: 'Failed to claim' });
     }
@@ -8461,9 +8520,9 @@ ${walletAddress}
         user.missionCommunityClaimed &&
         (hasNewReferral ? user.missionInviteClaimed : true);
       if (!allCoreDone) return res.status(400).json({ error: 'Complete all daily missions first' });
-      const reward = 10;
+      const reward = 0.0001;
       await db.execute(sql`UPDATE users SET mission_bonus_claimed = TRUE, balance = COALESCE(balance::numeric, 0) + ${reward} WHERE id = ${userId}`);
-      res.json({ success: true, reward, message: `+${reward} CIPHER bonus claimed!` });
+      res.json({ success: true, reward, gramReward: reward, message: `+${reward} GRAM bonus claimed!` });
     } catch (err) {
       res.status(500).json({ error: 'Failed to claim bonus' });
     }
@@ -8628,14 +8687,14 @@ ${walletAddress}
         });
       }
 
-      // Award 1000 CIPHER (daily)
-      const reward = 1000;
+      // Award 0.01 GRAM (daily)
+      const reward = 0.01;
       await pool.query(
         `UPDATE users SET balance = COALESCE(balance::numeric, 0) + $1, axn_name_last_claimed_at = NOW(), axn_name_reward_claimed = TRUE, tasks_completed = COALESCE(tasks_completed, 0) + 1 WHERE id = $2`,
         [reward, user.id]
       );
 
-      return res.json({ success: true, hasAxn: true, axnEarned: reward, message: `+${reward} CIPHER earned! $AXN found in your name.` });
+      return res.json({ success: true, hasAxn: true, gramReward: reward, message: `+${reward} GRAM earned! $AXN found in your name.` });
     } catch (error) {
       console.error('AXN name task error:', error);
       return res.status(500).json({ success: false, message: 'Internal server error' });
@@ -8658,14 +8717,14 @@ ${walletAddress}
       if (isNaN(imp) || imp < 10) {
         return res.status(400).json({ message: 'Minimum 10 impressions required' });
       }
-      const costPerImpression = 35;
+      const costPerImpression = 0.00035;
       const totalCost = imp * costPerImpression;
 
       const { pool } = await import('./db');
       const balRes = await pool.query(`SELECT balance FROM users WHERE id = $1`, [userId]);
       const currentBalance = parseFloat(balRes.rows[0]?.balance || '0');
       if (currentBalance < totalCost) {
-        return res.status(400).json({ message: `Insufficient balance. Required: ${totalCost} CIPHER, Available: ${Math.floor(currentBalance)} CIPHER` });
+        return res.status(400).json({ message: `Insufficient GRAM balance. Required: ${totalCost.toFixed(5)} GRAM, Available: ${currentBalance.toFixed(5)} GRAM` });
       }
 
       // ── Bot admin check for channel/group tasks ──────────────────────────────
@@ -8707,7 +8766,7 @@ ${walletAddress}
       try {
         await pool.query(`UPDATE users SET balance = COALESCE(balance::numeric, 0) - $1 WHERE id = $2`, [totalCost, userId]);
         const ins = await pool.query(
-          `INSERT INTO user_tasks (user_id, title, link, category, impressions, reward_per_completion, total_cost, status) VALUES ($1,$2,$3,$4,$5,100,$6,'pending') RETURNING id`,
+          `INSERT INTO user_tasks (user_id, title, link, category, impressions, reward_per_completion, total_cost, status) VALUES ($1,$2,$3,$4,$5,0.001,$6,'pending') RETURNING id`,
           [userId, title.slice(0, 100), link.slice(0, 500), category, imp, totalCost]
         );
         newTaskId = ins.rows[0].id;
@@ -8733,7 +8792,7 @@ ${walletAddress}
               `📋 Title: ${title.slice(0, 60)}\n` +
               `🏷 Type: ${catLabel}\n` +
               `👁 Impressions: ${imp}\n` +
-              `💰 Cost paid: ${totalCost} CIPHER\n` +
+              `💰 Cost paid: ${totalCost.toFixed(5)} GRAM\n` +
               `🔗 Link: ${link.slice(0, 80)}\n\n` +
               `Approve or reject in Admin Panel → Missions tab.`
           );
@@ -8879,7 +8938,7 @@ ${walletAddress}
       if (task.user_id !== userId) return res.status(403).json({ message: 'Not your task' });
       if (task.status === 'rejected') return res.status(400).json({ message: 'Rejected tasks cannot be deleted — balance was already refunded on rejection.' });
 
-      const COST_PER_IMPRESSION = 35;
+      const COST_PER_IMPRESSION = 0.00035;
       const remaining = Math.max(0, (task.impressions || 0) - (task.completed_count || 0));
       const refund = remaining * COST_PER_IMPRESSION;
 
@@ -8900,7 +8959,7 @@ ${walletAddress}
       }
 
       const msg = refund > 0
-        ? `Mission deleted. +${refund} CIPHER refunded (${remaining} unused impressions × 35).`
+        ? `Mission deleted. +${refund} GRAM refunded (${remaining} unused impressions × 0.00035).`
         : 'Mission deleted. No refund — all impressions were already used.';
       return res.json({ success: true, refund, message: msg });
     } catch (e) {
@@ -9003,12 +9062,15 @@ ${walletAddress}
       if (!telegramUser || !isAdmin(telegramUser.id.toString())) {
         return res.status(403).json({ message: 'Forbidden' });
       }
-      const { title, totalImpressions } = req.body;
+      const { title, totalImpressions, gramReward } = req.body;
       const { description, url } = req.body;
       if (!title) return res.status(400).json({ message: 'Title required' });
       const { pool } = await import('./db');
       const imp = parseInt(totalImpressions || '0', 10);
-      const reward = 200; // Partner tasks pay a fixed 200 CIPHER
+      const reward = Number(gramReward);
+      if (!Number.isFinite(reward) || reward <= 0) {
+        return res.status(400).json({ message: 'A valid GRAM reward is required' });
+      }
       await pool.query(
         `INSERT INTO bounty_tasks (title, description, url, reward_axn, key_cost, total_impressions, is_active) VALUES ($1,$2,$3,$4,0,$5,TRUE)`,
         [title.slice(0, 100), (description || '').slice(0, 300), url || '', reward, imp]
@@ -9042,11 +9104,11 @@ ${walletAddress}
       }
       const { pool } = await import('./db');
       const result = await pool.query(
-        `SELECT id, title, description, url, reward_axn, total_impressions, completed_count, is_active, is_paused, created_at
+        `SELECT id, title, description, url, reward_axn AS gram_reward, total_impressions, completed_count, is_active, is_paused, created_at
          FROM bounty_tasks
          ORDER BY id DESC`
       );
-      return res.json(result.rows);
+      return res.json(result.rows.map((task: any) => ({ ...task, gramReward: task.gram_reward })));
     } catch (e) {
       return res.status(500).json({ message: 'Failed to fetch partner tasks' });
     }
@@ -9071,79 +9133,79 @@ ${walletAddress}
   });
 
   // ── TON Auto-Withdrawal System ────────────────────────────────────────────
-  // ── CIPHER Deposit / Purchase System ─────────────────────────────────────
-  app.post('/api/cipher-deposit/create', authenticateTelegram, async (req: any, res) => {
+  // ── GRAM Deposit System ───────────────────────────────────────────────────
+  app.post('/api/gram-deposit/create', authenticateTelegram, async (req: any, res) => {
     try {
       const user = req.user?.user;
       if (!user) return res.status(401).json({ message: 'Not authenticated' });
 
       const walletAddress = String(req.body.walletAddress || '').trim();
-      const cipherAmount = String(req.body.cipherAmount || '').trim();
+      const gramAmount = String(req.body.gramAmount || '').trim();
       if (!walletAddress) return res.status(400).json({ message: 'Connect your wallet first' });
-      if (!/^[0-9]+$/.test(cipherAmount) || BigInt(cipherAmount) <= 0n) {
-        return res.status(400).json({ message: 'Enter a valid CIPHER amount' });
+      if (!/^(?:\d+)(?:\.\d{1,9})?$/.test(gramAmount) || Number(gramAmount) <= 0) {
+        return res.status(400).json({ message: 'Enter a valid GRAM amount' });
       }
-      if (BigInt(cipherAmount) > 1_000_000_000_000n) {
+      if (Number(gramAmount) > 10_000_000) {
         return res.status(400).json({ message: 'Amount is too large' });
       }
 
-      // 1 GRAM = 100,000 CIPHER and 1 TON = 1,000,000,000 nanoTON.
-      // This gives an exact integer conversion: 1 CIPHER = 10,000 nanoTON.
-      const tonAmountNano = (BigInt(cipherAmount) * 10_000n).toString();
+      // The app balance is GRAM. The TON wallet is the underlying chain rail:
+      // 1 GRAM is backed by exactly 1 TON (1,000,000,000 nanoTON).
+      const tonAmountNano = gramToNanoTon(gramAmount);
       const { pool } = await import('./db');
       const result = await pool.query(
-        `INSERT INTO cipher_deposits
-          (user_id, wallet_address, cipher_amount, ton_amount_nano, status, expires_at)
+        `INSERT INTO gram_deposits
+          (user_id, wallet_address, gram_amount, ton_amount_nano, status, expires_at)
          VALUES ($1, $2, $3, $4, 'pending', NOW() + INTERVAL '30 minutes')
-         RETURNING id, cipher_amount, ton_amount_nano, expires_at`,
-        [user.id, walletAddress, cipherAmount, tonAmountNano],
+         RETURNING id, gram_amount, ton_amount_nano, expires_at`,
+        [user.id, walletAddress, gramAmount, tonAmountNano],
       );
       const purchase = result.rows[0];
       return res.json({
         success: true,
         purchaseId: purchase.id,
-        cipherAmount: purchase.cipher_amount,
+        gramAmount: purchase.gram_amount,
         tonAmountNano: purchase.ton_amount_nano,
         tonAmount: Number(purchase.ton_amount_nano) / 1e9,
         expiresAt: purchase.expires_at,
       });
     } catch (error) {
-      console.error('[CIPHER-DEPOSIT] create error:', error);
+      console.error('[GRAM-DEPOSIT] create error:', error);
       return res.status(500).json({ message: 'Could not create purchase request' });
     }
   });
 
-  app.get('/api/cipher-deposit/status/:id', authenticateTelegram, async (req: any, res) => {
+  app.get('/api/gram-deposit/status/:id', authenticateTelegram, async (req: any, res) => {
     try {
       const user = req.user?.user;
       if (!user) return res.status(401).json({ message: 'Not authenticated' });
       const { pool } = await import('./db');
       const owned = await pool.query(
-        `SELECT id, user_id FROM cipher_deposits WHERE id = $1 AND user_id = $2`,
+        `SELECT id, user_id FROM gram_deposits WHERE id = $1 AND user_id = $2`,
         [req.params.id, user.id],
       );
       if (!owned.rows[0]) return res.status(404).json({ message: 'Deposit request not found' });
-      return res.json(await settleCipherDeposit(req.params.id));
+      return res.json(await settleGramDeposit(req.params.id));
     } catch (error) {
-      console.error('[CIPHER-DEPOSIT] status error:', error);
-      return res.status(500).json({ message: 'Payment verification failed. No balance was credited.' });
+      console.error('[GRAM-DEPOSIT] status error:', error);
+      return res.status(500).json({ message: '❌ Payment verification failed. Please wait for blockchain confirmation or contact support if the issue persists.' });
     }
   });
 
-  app.post('/api/cipher-deposit/verify/:id', authenticateTelegram, async (req: any, res) => {
+  app.post('/api/gram-deposit/verify/:id', authenticateTelegram, async (req: any, res) => {
     try {
       const user = req.user?.user;
       if (!user) return res.status(401).json({ message: 'Not authenticated' });
       const { pool } = await import('./db');
       const owned = await pool.query(
-        `SELECT id FROM cipher_deposits WHERE id = $1 AND user_id = $2`,
+        `SELECT id FROM gram_deposits WHERE id = $1 AND user_id = $2`,
         [req.params.id, user.id],
       );
       if (!owned.rows[0]) return res.status(404).json({ message: 'Purchase request not found' });
-      return res.json(await settleCipherDeposit(req.params.id));
+      return res.json(await settleGramDeposit(req.params.id));
     } catch (error) {
-      console.error('[CIPHER-DEPOSIT] verify error:', error);
-      return res.status(500).json({ message: 'Payment verification failed. No balance was credited.' });
+      console.error('[GRAM-DEPOSIT] verify error:', error);
+      return res.status(500).json({ message: '❌ Payment verification failed. Please wait for blockchain confirmation or contact support if the issue persists.' });
     }
   });
 
@@ -9421,23 +9483,36 @@ async function startTonPoller() {
 
   async function poll() {
     try {
-      // 0. Settle pending CIPHER deposits independently of the client.
+      // 0. Settle pending GRAM deposits independently of the client.
       // This covers manual transfers and payments made after the popup closes.
-      const pendingCipherDeposits = await pool.query(
-        `SELECT id
-         FROM cipher_deposits
-         WHERE status = 'pending' AND expires_at > NOW()
+      const pendingGramDeposits = await pool.query(
+        `SELECT gd.id
+         FROM gram_deposits gd
+         WHERE (
+           gd.status = 'pending' AND gd.expires_at > NOW()
+         ) OR (
+           gd.status = 'credited'
+           AND EXISTS (
+             SELECT 1 FROM referrals r
+             WHERE r.referee_id = gd.user_id
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM transactions t
+             WHERE t.source = 'referral_deposit_commission'
+               AND t.metadata->>'orderId' = 'gram_deposit_' || gd.id
+           )
+         )
          ORDER BY created_at ASC
          LIMIT 100`,
       );
-      for (const deposit of pendingCipherDeposits.rows) {
+      for (const deposit of pendingGramDeposits.rows) {
         try {
-          const result = await settleCipherDeposit(deposit.id);
-          if (result.status === 'credited') {
-            console.log(`[CIPHER-POLLER] ✅ Credited ${result.cipherAmount} CIPHER for deposit ${deposit.id}`);
+          const result = await settleGramDeposit(deposit.id);
+          if (result.status === 'credited' && result.gramAmount) {
+            console.log(`[GRAM-POLLER] ✅ Credited ${result.gramAmount} GRAM for deposit ${deposit.id}`);
           }
         } catch (error) {
-          console.error(`[CIPHER-POLLER] Failed to settle deposit ${deposit.id}:`, error);
+          console.error(`[GRAM-POLLER] Failed to settle deposit ${deposit.id}:`, error);
         }
       }
 

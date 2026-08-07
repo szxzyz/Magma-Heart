@@ -3,14 +3,115 @@ const { Client } = pkg;
 import { db } from './db';
 import { sql } from 'drizzle-orm';
 
-// CRITICAL: Disable TLS check for internal Render/Replit DB connections
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+type CurrencySource = 'legacy_cipher' | 'gram';
+
+async function establishCurrencySource(): Promise<CurrencySource> {
+  return db.transaction(async (tx) => {
+    const existing = await tx.execute(sql`
+      SELECT source_currency
+      FROM currency_migration_state
+      WHERE migration_key = 'axionet_currency_v1'
+      FOR UPDATE
+    `);
+    if ((existing as any).rows?.length > 0) {
+      const establishedSource = (existing as any).rows[0].source_currency as CurrencySource;
+      const currentTables = await tx.execute(sql`
+        SELECT
+          to_regclass('public.cipher_deposits') IS NOT NULL AS has_cipher_deposits,
+          to_regclass('public.gram_deposits') IS NOT NULL AS has_gram_deposits
+      `);
+      const current = (currentTables as any).rows?.[0];
+      if (establishedSource === 'gram' && current?.has_cipher_deposits) {
+        throw new Error(
+          '[MIGRATION] Recorded GRAM state conflicts with surviving cipher_deposits; refusing startup.',
+        );
+      }
+      if (establishedSource === 'legacy_cipher' && current?.has_cipher_deposits && current?.has_gram_deposits) {
+        throw new Error(
+          '[MIGRATION] Both legacy and GRAM deposit tables exist during conversion; refusing startup.',
+        );
+      }
+      return establishedSource;
+    }
+
+    const signals = await tx.execute(sql`
+      SELECT
+        to_regclass('public.cipher_deposits') IS NOT NULL AS has_cipher_deposits,
+        to_regclass('public.gram_deposits') IS NOT NULL AS has_gram_deposits,
+        EXISTS (
+          SELECT 1 FROM admin_settings
+          WHERE setting_key = 'gram_currency_migration_v1'
+        ) AS has_currency_marker,
+        EXISTS (
+          SELECT 1 FROM admin_settings
+          WHERE setting_key IN (
+            'gram_promo_conversion_v1',
+            'gram_task_conversion_v1',
+            'partner_reward_200_backfill'
+          )
+        ) AS has_partial_marker,
+        (SELECT COUNT(*) FROM users) AS user_count
+    `);
+    const signal = (signals as any).rows[0];
+    const hasCipherDeposits = Boolean(signal?.has_cipher_deposits);
+    const hasGramDeposits = Boolean(signal?.has_gram_deposits);
+    const hasCurrencyMarker = Boolean(signal?.has_currency_marker);
+    const hasPartialMarker = Boolean(signal?.has_partial_marker);
+    const userCount = Number(signal?.user_count || 0);
+
+    let source: CurrencySource;
+    if (hasCurrencyMarker && hasCipherDeposits) {
+      throw new Error(
+        '[MIGRATION] Currency marker conflicts with surviving cipher_deposits; refusing startup.',
+      );
+    } else if (hasCurrencyMarker) {
+      // The prior guarded migration is authoritative: its marker means the
+      // earning currency has already been converted to GRAM.
+      source = 'gram';
+    } else if (hasCipherDeposits && !hasGramDeposits) {
+      // A surviving legacy deposit table is definitive evidence that the
+      // earning values still need conversion, even if an older deployment
+      // wrote one of the feature-specific markers first.
+      source = 'legacy_cipher';
+    } else if (!hasCipherDeposits && !hasGramDeposits && !hasPartialMarker && userCount === 0) {
+      // A genuinely empty database has no legacy values to convert.
+      source = 'gram';
+    } else {
+      throw new Error(
+        '[MIGRATION] Ambiguous currency state. Refusing to mutate balances; ' +
+        'set or reconcile the currency migration state before startup.',
+      );
+    }
+
+    await tx.execute(sql`
+      INSERT INTO currency_migration_state
+        (migration_key, migration_version, source_currency, status, details)
+      VALUES (
+        'axionet_currency_v1',
+        1,
+        ${source},
+        'established',
+        ${JSON.stringify({
+          hasCipherDeposits,
+          hasGramDeposits,
+          hasCurrencyMarker,
+          hasPartialMarker,
+          userCount,
+        })}::jsonb
+      )
+    `);
+    console.log(`✅ [MIGRATION] Currency source established as ${source}`);
+    return source;
+  });
+}
 
 export async function ensureDatabaseSchema(): Promise<void> {
   if (process.env.DATABASE_URL) {
     const client = new Client({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
+      ssl: process.env.DATABASE_SSL_CA
+        ? { ca: process.env.DATABASE_SSL_CA, rejectUnauthorized: true }
+        : { rejectUnauthorized: true }
     });
     try {
       await client.connect();
@@ -24,23 +125,9 @@ export async function ensureDatabaseSchema(): Promise<void> {
   try {
     console.log('🔄 [MIGRATION] Ensuring all database tables exist...');
 
-    // Drop unused tables (cleanup - safe with IF EXISTS + CASCADE)
-    try {
-      await db.execute(sql`DROP TABLE IF EXISTS task_clicks CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS task_completions CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS promotion_claims CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS referral_commissions CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS user_referral_tasks CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS mining_boosts CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS daily_tasks CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS advertiser_tasks CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS daily_missions CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS deposits CASCADE`);
-      await db.execute(sql`DROP TABLE IF EXISTS promotions CASCADE`);
-      console.log('✅ [MIGRATION] Unused tables dropped');
-    } catch (dropErr) {
-      console.log('ℹ️ [MIGRATION] Drop tables note:', dropErr);
-    }
+    // Do not drop legacy tables during application startup. They may still
+    // contain data needed for a staged migration or rollback.
+    console.log('✅ [MIGRATION] Preserving legacy tables for compatibility');
 
     // Enable pgcrypto extension for gen_random_uuid() support
     try {
@@ -61,6 +148,34 @@ export async function ensureDatabaseSchema(): Promise<void> {
       )
     `);
     console.log('✅ [MIGRATION] Sessions table ensured');
+
+    // Source detection runs before the full settings setup below, so ensure
+    // this compatibility table exists before establishCurrencySource().
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS admin_settings (
+        id SERIAL PRIMARY KEY,
+        setting_key VARCHAR NOT NULL,
+        setting_value TEXT NOT NULL,
+        description TEXT,
+        updated_by VARCHAR,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // This state table is deliberately separate from feature-specific markers.
+    // It records the source currency before any value conversion can run.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS currency_migration_state (
+        migration_key VARCHAR PRIMARY KEY,
+        migration_version INTEGER NOT NULL,
+        source_currency VARCHAR NOT NULL,
+        status VARCHAR NOT NULL,
+        details JSONB,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
     
     // Users table with full schema
     await db.execute(sql`
@@ -73,7 +188,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
         last_name TEXT,
         profile_image_url TEXT,
         personal_code TEXT,
-        balance DECIMAL(20, 0) DEFAULT '0',
+        balance DECIMAL(30, 10) DEFAULT '0',
         withdraw_balance DECIMAL(30, 10),
         total_earnings DECIMAL(30, 10),
         total_earned DECIMAL(30, 10) DEFAULT '0',
@@ -205,7 +320,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_mining_boost DECIMAL(20, 8) DEFAULT '0'`);
       
       // Alter existing balance columns to new precision (safely handle existing data)
-      await db.execute(sql`ALTER TABLE users ALTER COLUMN balance TYPE DECIMAL(20, 0) USING ROUND(balance)`);
+      await db.execute(sql`ALTER TABLE users ALTER COLUMN balance TYPE DECIMAL(30, 10) USING balance::numeric`);
       await db.execute(sql`ALTER TABLE users ALTER COLUMN usd_balance TYPE DECIMAL(30, 10)`);
       await db.execute(sql`ALTER TABLE users ALTER COLUMN ton_balance TYPE DECIMAL(30, 10)`);
       await db.execute(sql`ALTER TABLE users ALTER COLUMN pdz_balance TYPE DECIMAL(30, 10)`);
@@ -292,13 +407,56 @@ export async function ensureDatabaseSchema(): Promise<void> {
       )
     `);
 
-    // CIPHER purchases are credited only after exact on-chain verification.
+    // Establish the source before touching deposits or any balance-like value.
+    // Existing markers/data are treated as evidence; ambiguous states fail
+    // closed instead of guessing and risking a second 100,000x conversion.
+    const currencySource = await establishCurrencySource();
+
+    // GRAM deposits are credited only after exact on-chain verification.
+    // Keep existing installs compatible by renaming the legacy table and
+    // converting its integer earning units exactly once.
+    if (currencySource === 'legacy_cipher') {
+      await db.transaction(async (tx) => {
+        const conversion = await tx.execute(sql`
+          INSERT INTO currency_migration_state
+            (migration_key, migration_version, source_currency, status, details)
+          VALUES (
+            'axionet_currency_deposits_v1',
+            1,
+            'legacy_cipher',
+            'converting',
+            '{"conversion":"cipher_deposits_to_gram_deposits"}'::jsonb
+          )
+          ON CONFLICT (migration_key) DO NOTHING
+          RETURNING migration_key
+        `);
+        if ((conversion as any).rows?.length > 0) {
+          await tx.execute(sql`
+            ALTER TABLE cipher_deposits RENAME TO gram_deposits
+          `);
+          await tx.execute(sql`
+            ALTER TABLE gram_deposits RENAME COLUMN cipher_amount TO gram_amount
+          `);
+          await tx.execute(sql`
+            ALTER TABLE gram_deposits ALTER COLUMN gram_amount TYPE DECIMAL(30, 10)
+          `);
+          await tx.execute(sql`
+            UPDATE gram_deposits SET gram_amount = gram_amount / 100000
+          `);
+          await tx.execute(sql`
+            UPDATE currency_migration_state
+            SET status = 'complete', updated_at = NOW()
+            WHERE migration_key = 'axionet_currency_deposits_v1'
+          `);
+        }
+      });
+    }
     await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS cipher_deposits (
+      CREATE TABLE IF NOT EXISTS gram_deposits (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id VARCHAR NOT NULL REFERENCES users(id),
         wallet_address VARCHAR NOT NULL,
-        cipher_amount DECIMAL(30, 0) NOT NULL,
+        gram_amount DECIMAL(30, 10) NOT NULL,
         ton_amount_nano NUMERIC(40, 0) NOT NULL,
         payment_hash VARCHAR UNIQUE,
         status VARCHAR NOT NULL DEFAULT 'pending',
@@ -307,6 +465,9 @@ export async function ensureDatabaseSchema(): Promise<void> {
         credited_at TIMESTAMP
       )
     `);
+    await db.execute(sql`ALTER TABLE gram_deposits ADD COLUMN IF NOT EXISTS gram_amount DECIMAL(30, 10)`);
+    await db.execute(sql`ALTER TABLE gram_deposits ADD COLUMN IF NOT EXISTS payment_hash VARCHAR`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS gram_deposits_payment_hash_idx ON gram_deposits(payment_hash) WHERE payment_hash IS NOT NULL`);
     
     // Withdrawals table
     await db.execute(sql`
@@ -443,7 +604,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       CREATE TABLE IF NOT EXISTS user_balances (
         id SERIAL PRIMARY KEY,
         user_id VARCHAR UNIQUE NOT NULL REFERENCES users(id),
-        balance DECIMAL(20, 8) DEFAULT '0',
+        balance DECIMAL(30, 10) DEFAULT '0',
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
@@ -455,7 +616,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         referrer_id VARCHAR NOT NULL REFERENCES users(id),
         referee_id VARCHAR NOT NULL REFERENCES users(id),
-        reward_amount DECIMAL(30, 10) DEFAULT '1000',
+        reward_amount DECIMAL(30, 10) DEFAULT '0.01',
         usd_reward_amount DECIMAL(30, 10) DEFAULT '0',
         ton_reward_amount DECIMAL(30, 10) DEFAULT '0',
         bug_reward_amount DECIMAL(30, 10) DEFAULT '0',
@@ -467,6 +628,36 @@ export async function ensureDatabaseSchema(): Promise<void> {
     
     // Add missing columns to referrals table
     try {
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF to_regclass('public.referrals') IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'referrals' AND column_name = 'referred_id'
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'referrals' AND column_name = 'referee_id'
+             ) THEN
+            ALTER TABLE referrals RENAME COLUMN referred_id TO referee_id;
+          END IF;
+        END $$;
+      `);
+      await db.execute(sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS referee_id VARCHAR`);
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'referrals' AND column_name = 'referred_id'
+          ) THEN
+            UPDATE referrals
+            SET referee_id = COALESCE(referee_id, referred_id)
+            WHERE referee_id IS NULL;
+          END IF;
+        END $$;
+      `);
       await db.execute(sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS usd_reward_amount DECIMAL(30, 10) DEFAULT '0'`);
       await db.execute(sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS ton_reward_amount DECIMAL(30, 10) DEFAULT '0'`);
       await db.execute(sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS bug_reward_amount DECIMAL(30, 10) DEFAULT '0'`);
@@ -519,6 +710,54 @@ export async function ensureDatabaseSchema(): Promise<void> {
       console.log('✅ [MIGRATION] admin_settings unique constraint ensured');
     } catch (error) {
       console.log('ℹ️ [MIGRATION] admin_settings unique constraint already exists or cannot be added');
+    }
+
+    // Convert the former integer earning currency to GRAM exactly once.
+    // AXN farming/withdrawal records remain in AXN and are intentionally
+    // excluded from this conversion.
+    if (currencySource === 'legacy_cipher') {
+      await db.transaction(async (tx) => {
+        const conversion = await tx.execute(sql`
+          INSERT INTO admin_settings (setting_key, setting_value, description)
+          VALUES ('gram_currency_migration_v1', 'done', 'Converted legacy earning balances and GRAM ledger values')
+          ON CONFLICT (setting_key) DO NOTHING
+          RETURNING setting_key
+        `);
+        if ((conversion as any).rows?.length > 0) {
+          await tx.execute(sql`
+            ALTER TABLE users ALTER COLUMN balance TYPE NUMERIC(30, 10)
+              USING COALESCE(balance::numeric, 0) / 100000
+          `);
+          await tx.execute(sql`
+            ALTER TABLE users ALTER COLUMN total_earned TYPE NUMERIC(30, 10)
+              USING COALESCE(total_earned::numeric, 0) / 100000
+          `);
+          await tx.execute(sql`
+            ALTER TABLE users ALTER COLUMN total_earnings TYPE NUMERIC(30, 10)
+              USING COALESCE(total_earnings::numeric, 0) / 100000
+          `);
+          await tx.execute(sql`
+            ALTER TABLE user_balances ALTER COLUMN balance TYPE NUMERIC(30, 10)
+              USING COALESCE(balance::numeric, 0) / 100000
+          `);
+          await tx.execute(sql`
+            UPDATE earnings
+            SET amount = amount / 100000
+            WHERE source NOT IN ('nft_reward', 'withdrawal', 'axn_withdrawal', 'ton_withdrawal')
+          `);
+          await tx.execute(sql`
+            UPDATE transactions
+            SET amount = amount / 100000
+            WHERE source NOT IN ('nft_reward', 'withdrawal', 'axn_withdrawal', 'ton_withdrawal')
+          `);
+          await tx.execute(sql`
+            UPDATE referrals
+            SET reward_amount = reward_amount / 100000,
+                deposit_commission_earned = deposit_commission_earned / 100000
+            WHERE reward_amount IS NOT NULL OR deposit_commission_earned IS NOT NULL
+          `);
+        }
+      });
     }
     
     // Initialize default admin settings if they don't exist
@@ -660,7 +899,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
-        reward_axn INTEGER NOT NULL DEFAULT 50,
+        reward_axn NUMERIC(30, 10) NOT NULL DEFAULT 0.0005,
         key_cost INTEGER NOT NULL DEFAULT 5,
         url TEXT,
         is_active BOOLEAN DEFAULT TRUE,
@@ -669,21 +908,43 @@ export async function ensureDatabaseSchema(): Promise<void> {
     `);
     console.log('✅ [MIGRATION] bounty_tasks table ensured');
 
-    // One-time backfill: standardize existing partner task rewards at 200 CIPHER.
-    // Guarded by an admin_settings flag so it never re-runs and admin edits stay intact.
-    try {
-      const backfillFlag = await db.execute(sql`
-        INSERT INTO admin_settings (setting_key, setting_value, description)
-        VALUES ('partner_reward_200_backfill', 'done', 'One-time backfill of partner task rewards to 200 CIPHER')
-        ON CONFLICT (setting_key) DO NOTHING
-        RETURNING setting_key
-      `);
-      if ((backfillFlag as any).rows?.length > 0) {
-        await db.execute(sql`UPDATE bounty_tasks SET reward_axn = 200`);
-        console.log('✅ [MIGRATION] Partner task rewards backfilled to 200 CIPHER (one-time)');
+    // One-time backfill: standardize legacy partner task rewards at 0.002
+    // GRAM. Never run this independent of the established source currency.
+    if (currencySource === 'legacy_cipher') {
+      try {
+        await db.transaction(async (tx) => {
+          const backfillFlag = await tx.execute(sql`
+            INSERT INTO admin_settings (setting_key, setting_value, description)
+            VALUES ('partner_reward_200_backfill', 'done', 'One-time backfill of partner task rewards to 0.002 GRAM')
+            ON CONFLICT (setting_key) DO NOTHING
+            RETURNING setting_key
+          `);
+          if ((backfillFlag as any).rows?.length > 0) {
+            await tx.execute(sql`UPDATE bounty_tasks SET reward_axn = 0.002`);
+            console.log('✅ [MIGRATION] Partner task rewards backfilled to 0.002 GRAM (one-time)');
+          }
+        });
+      } catch (e) {
+        console.warn('⚠️ [MIGRATION] Partner reward backfill skipped:', e);
       }
-    } catch (e) {
-      console.warn('⚠️ [MIGRATION] Partner reward backfill skipped:', e);
+    } else {
+      const partnerState = await db.execute(sql`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM admin_settings
+            WHERE setting_key = 'partner_reward_200_backfill'
+          ) AS has_marker,
+          EXISTS (
+            SELECT 1 FROM bounty_tasks
+            WHERE reward_axn::numeric >= 1
+          ) AS has_legacy_values
+      `);
+      const partnerRow = (partnerState as any).rows?.[0];
+      if (!partnerRow?.has_marker && partnerRow?.has_legacy_values) {
+        throw new Error(
+          '[MIGRATION] GRAM source has unmarked legacy partner-task values; refusing conversion.',
+        );
+      }
     }
 
     // Bounty task completions table
@@ -705,16 +966,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_balance DECIMAL(20, 0) DEFAULT '0'`);
       await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS migration_completed BOOLEAN DEFAULT FALSE`);
       await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS migration_intro_seen BOOLEAN DEFAULT FALSE`);
-      // Backfill: copy existing balance into mining_balance for users who haven't migrated yet
-      await db.execute(sql`
-        UPDATE users
-        SET mining_balance = balance
-        WHERE (mining_balance IS NULL OR mining_balance = 0)
-          AND balance IS NOT NULL
-          AND balance > 0
-          AND (migration_completed IS NULL OR migration_completed = FALSE)
-      `);
-      console.log('✅ [MIGRATION] Season 2 migration columns ensured');
+      console.log('✅ [MIGRATION] Season 2 compatibility columns ensured');
     } catch (e) {
       console.log('ℹ️ [MIGRATION] Season 2 migration columns already exist');
     }
@@ -767,6 +1019,46 @@ export async function ensureDatabaseSchema(): Promise<void> {
     } catch (e) {
       console.log('ℹ️ [MIGRATION] promo_codes column backfill note:', e);
     }
+    if (currencySource === 'legacy_cipher') {
+      await db.transaction(async (tx) => {
+        const conversionFlag = await tx.execute(sql`
+          INSERT INTO admin_settings (setting_key, setting_value, description)
+          VALUES ('gram_promo_conversion_v1', 'done', 'Converted legacy GRAM promo code values')
+          ON CONFLICT (setting_key) DO NOTHING
+          RETURNING setting_key
+        `);
+        if ((conversionFlag as any).rows?.length > 0) {
+          await tx.execute(sql`
+            UPDATE promo_codes
+            SET reward_amount = reward_amount / 100000
+            WHERE UPPER(COALESCE(reward_type, '')) IN ('GRAM', 'CIPHER')
+          `);
+          await tx.execute(sql`
+            UPDATE promo_codes
+            SET reward_type = 'GRAM'
+            WHERE UPPER(COALESCE(reward_type, '')) = 'CIPHER'
+          `);
+        }
+      });
+    } else {
+      const promoState = await db.execute(sql`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM admin_settings
+            WHERE setting_key = 'gram_promo_conversion_v1'
+          ) AS has_marker,
+          EXISTS (
+            SELECT 1 FROM promo_codes
+            WHERE UPPER(COALESCE(reward_type, '')) = 'CIPHER'
+          ) AS has_legacy_values
+      `);
+      const promoRow = (promoState as any).rows?.[0];
+      if (!promoRow?.has_marker && promoRow?.has_legacy_values) {
+        throw new Error(
+          '[MIGRATION] GRAM source has unmarked legacy promo values; refusing conversion.',
+        );
+      }
+    }
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_promo_codes_code ON promo_codes(code)`);
 
     await db.execute(sql`
@@ -810,7 +1102,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
         link TEXT NOT NULL,
         category VARCHAR(20) NOT NULL DEFAULT 'channel_group',
         impressions INTEGER NOT NULL DEFAULT 10,
-        reward_per_completion INTEGER NOT NULL DEFAULT 10,
+        reward_per_completion NUMERIC(30, 10) NOT NULL DEFAULT 0.0001,
         total_cost NUMERIC(20,4) NOT NULL DEFAULT 0,
         completed_count INTEGER NOT NULL DEFAULT 0,
         status VARCHAR(20) NOT NULL DEFAULT 'pending',
@@ -820,6 +1112,59 @@ export async function ensureDatabaseSchema(): Promise<void> {
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_user_tasks_user ON user_tasks(user_id)`);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_user_tasks_status ON user_tasks(status)`);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_user_tasks_category ON user_tasks(category)`);
+
+    // Convert legacy user-created task prices/rewards exactly once. The
+    // columns are retained for schema compatibility, but their values are
+    // decimal GRAM at runtime.
+    if (currencySource === 'legacy_cipher') {
+      try {
+        await db.transaction(async (tx) => {
+          const taskConversion = await tx.execute(sql`
+            INSERT INTO admin_settings (setting_key, setting_value, description)
+            VALUES ('gram_task_conversion_v1', 'done', 'Converted legacy user and partner task values to GRAM')
+            ON CONFLICT (setting_key) DO NOTHING
+            RETURNING setting_key
+          `);
+          if ((taskConversion as any).rows?.length > 0) {
+            await tx.execute(sql`
+              UPDATE user_tasks
+              SET reward_per_completion = reward_per_completion / 100000,
+                  total_cost = total_cost / 100000
+              WHERE reward_per_completion >= 1 OR total_cost >= 1
+            `);
+            await tx.execute(sql`
+              UPDATE bounty_tasks
+              SET reward_axn = reward_axn / 100000
+              WHERE reward_axn >= 1
+            `);
+          }
+        });
+      } catch (e) {
+        console.warn('⚠️ [MIGRATION] Task GRAM conversion skipped:', e);
+      }
+    } else {
+      const taskState = await db.execute(sql`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM admin_settings
+            WHERE setting_key = 'gram_task_conversion_v1'
+          ) AS has_marker,
+          EXISTS (
+            SELECT 1 FROM user_tasks
+            WHERE reward_per_completion::numeric >= 1
+               OR total_cost::numeric >= 1
+          ) OR EXISTS (
+            SELECT 1 FROM bounty_tasks
+            WHERE reward_axn::numeric >= 1
+          ) AS has_legacy_values
+      `);
+      const taskRow = (taskState as any).rows?.[0];
+      if (!taskRow?.has_marker && taskRow?.has_legacy_values) {
+        throw new Error(
+          '[MIGRATION] GRAM source has unmarked legacy task values; refusing conversion.',
+        );
+      }
+    }
 
     // User Task Completions table
     await db.execute(sql`
@@ -842,31 +1187,8 @@ export async function ensureDatabaseSchema(): Promise<void> {
     // Bounty tasks: add is_paused column for pause/resume support
     await db.execute(sql`ALTER TABLE bounty_tasks ADD COLUMN IF NOT EXISTS is_paused BOOLEAN DEFAULT FALSE`);
 
-    // Delete specific outdated partner tasks by title
-    try {
-      await db.execute(sql`
-        DELETE FROM bounty_task_completions
-        WHERE task_id IN (
-          SELECT id FROM bounty_tasks
-          WHERE LOWER(title) LIKE '%join axionet channel%'
-             OR LOWER(title) LIKE '%follow on twitter%'
-             OR LOWER(title) LIKE '%twitter%'
-             OR LOWER(title) LIKE '%hourly stars%'
-             OR LOWER(title) LIKE '%share axionet%'
-        )
-      `);
-      await db.execute(sql`
-        DELETE FROM bounty_tasks
-        WHERE LOWER(title) LIKE '%join axionet channel%'
-           OR LOWER(title) LIKE '%follow on twitter%'
-           OR LOWER(title) LIKE '%twitter%'
-           OR LOWER(title) LIKE '%hourly stars%'
-           OR LOWER(title) LIKE '%share axionet%'
-      `);
-      console.log('✅ [MIGRATION] Removed outdated partner tasks');
-    } catch (e) {
-      console.log('ℹ️ [MIGRATION] Partner task cleanup skipped:', e);
-    }
+    // Existing partner tasks are preserved during startup. Admins can remove
+    // individual tasks explicitly through the admin API.
 
     // User machines table (passive GRAM/AXN earning machines)
     await db.execute(sql`

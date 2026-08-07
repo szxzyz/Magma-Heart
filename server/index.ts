@@ -23,15 +23,6 @@ try {
   // Continue server startup even if setup fails
 }
 
-// Reset only legacy mining_balance to 0 — balance (CIPHER) is preserved
-try {
-  const { pool } = await import('./db');
-  await pool.query(`UPDATE users SET mining_balance = 0 WHERE COALESCE(mining_balance::numeric, 0) > 0`);
-  console.log('✅ Legacy mining_balance reset to 0 for all users (CIPHER balance preserved)');
-} catch (error) {
-  console.log('⚠️ Could not reset legacy mining_balance (non-critical):', error);
-}
-
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

@@ -13,14 +13,19 @@ function getSSLConfig() {
     return false;
   }
   
-  // For Neon database, always use SSL with rejectUnauthorized: false
+  // Validate the database certificate by default. A provider CA can be
+  // supplied explicitly when the deployment uses a private certificate.
   if (databaseUrl?.includes('neon.tech')) {
-    return { rejectUnauthorized: false };
+    return process.env.DATABASE_SSL_CA
+      ? { ca: process.env.DATABASE_SSL_CA, rejectUnauthorized: true }
+      : { rejectUnauthorized: true };
   }
   
   // For other cloud databases in production
   if (databaseUrl?.includes('render.com') || process.env.NODE_ENV === 'production') {
-    return { rejectUnauthorized: false };
+    return process.env.DATABASE_SSL_CA
+      ? { ca: process.env.DATABASE_SSL_CA, rejectUnauthorized: true }
+      : { rejectUnauthorized: true };
   }
   
   // For local development, disable SSL by default

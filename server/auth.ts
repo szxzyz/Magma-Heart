@@ -35,6 +35,10 @@ function getClientIP(req: any): string {
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret && process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET must be configured in production');
+  }
   
   // Configure session store using the same SSL-configured pool as the main database
   const sessionStore = new pgStore({
@@ -45,7 +49,7 @@ export function getSession() {
   });
   
   return session({
-    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+    secret: sessionSecret || 'development-session-secret',
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
@@ -144,7 +148,7 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
     }
     
     // Development mode - allow test users (only in development, not production)
-    if (!telegramData && (process.env.NODE_ENV === 'development' || process.env.REPL_ID)) {
+    if (!telegramData && process.env.NODE_ENV === 'development') {
       console.log('🔧 Development mode: Using test user authentication');
       
       const testUser = {
@@ -171,8 +175,8 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
             username: testUser.username,
             telegram_id: testUser.id.toString(),
             personalCode: testUser.username || testUser.id.toString(),
-            withdrawBalance: '0',
-            totalEarnings: '0',
+            withdraw_balance: '0',
+            total_earnings: '0',
             adsWatched: 0,
             dailyAdsWatched: 0,
             dailyEarnings: '0',
@@ -224,7 +228,7 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
         return next();
       }
       // In dev/Replit environment, use test user fallback
-      if (process.env.NODE_ENV === 'development' || process.env.REPL_ID) {
+      if (process.env.NODE_ENV === 'development') {
         console.log('🔧 No bot token + dev mode: falling back to test user');
         const testUserId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
         const existingUser = await storage.getUser(testUserId);
@@ -261,7 +265,7 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
       if (deviceValidation.shouldBan) {
         // CRITICAL: Create or update user as banned to persist the ban in database
         let bannedUser;
-        const { user: existingUser } = await storage.getTelegramUser(telegramUser.id.toString());
+        const existingUser = await storage.getUserByTelegramId(telegramUser.id.toString());
         
         if (existingUser) {
           // User exists, ban them
@@ -278,8 +282,8 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
             lastName: telegramUser.last_name,
             username: telegramUser.username,
             personalCode: telegramUser.username || telegramUser.id.toString(),
-            withdrawBalance: '0',
-            totalEarnings: '0',
+            withdraw_balance: '0',
+            total_earnings: '0',
             adsWatched: 0,
             dailyAdsWatched: 0,
             dailyEarnings: '0',
@@ -288,7 +292,7 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
             banned: true,  // Create as banned
             bannedReason: deviceValidation.reason || "Multiple accounts detected on the same device",
             referralCode: '',
-          }, deviceInfo);
+          });
           bannedUser = newBannedUser;
         }
         
@@ -315,8 +319,8 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
       lastName: telegramUser.last_name,
       username: telegramUser.username,
       personalCode: telegramUser.username || telegramUser.id.toString(),
-      withdrawBalance: '0',
-      totalEarnings: '0',
+      withdraw_balance: '0',
+      total_earnings: '0',
       adsWatched: 0,
       dailyAdsWatched: 0,
       dailyEarnings: '0',
@@ -324,7 +328,7 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
       flagged: false,
       banned: false,
       referralCode: '',
-    }, deviceInfo);
+    });
     
     // CRITICAL: Check if returning user is already banned
     if (upsertedUser.banned) {

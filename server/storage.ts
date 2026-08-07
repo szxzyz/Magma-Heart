@@ -145,7 +145,7 @@ export interface IStorage {
 
   // Referral Tasks (userReferralTasks table dropped)
   getUserReferralTasks(userId: string): Promise<any[]>;
-  claimReferralTask(userId: string, taskId: string): Promise<{ success: boolean; message: string; rewardAXN?: string; miningBoost?: string }>;
+  claimReferralTask(userId: string, taskId: string): Promise<{ success: boolean; message: string; gramReward?: string; miningBoost?: string }>;
 
   // Farming operations
   getFarmingState(userId: string): Promise<{
@@ -578,7 +578,7 @@ export class DatabaseStorage implements IStorage {
       }
       
       try {
-        // All non-farming earnings go to balance (CIPHER). AXN is farming-only.
+        // All non-farming earnings go to the GRAM balance. AXN is farming-only.
         await db
           .update(users)
           .set({
@@ -1014,7 +1014,7 @@ export class DatabaseStorage implements IStorage {
              total_earnings = COALESCE(total_earnings::numeric, 0) + $1,
              updated_at = NOW()
          WHERE id = $2`,
-        [1000, referrerId],
+        [0.01, referrerId],
       );
       await client.query(
         `UPDATE referrals
@@ -1023,13 +1023,13 @@ export class DatabaseStorage implements IStorage {
              status = 'completed',
              completed_at = COALESCE(completed_at, NOW())
          WHERE id = $2`,
-        [1000, referralId],
+        [0.01, referralId],
       );
       const earningResult = await client.query(
         `INSERT INTO earnings (user_id, amount, source, description)
          VALUES ($1, $2, 'referral_milestone', 'Automatic reward: referred friend collected 100 AXN')
          RETURNING id`,
-        [referrerId, 1000],
+        [referrerId, 0.01],
       );
       await client.query(
         `INSERT INTO transactions (user_id, amount, type, source, description, metadata)
@@ -1041,10 +1041,10 @@ export class DatabaseStorage implements IStorage {
                    'milestoneAxn', 100,
                    'earningId', $5
                  ))`,
-        [referrerId, 1000, referralId, referredUserId, earningResult.rows[0]?.id],
+        [referrerId, 0.01, referralId, referredUserId, earningResult.rows[0]?.id],
       );
       await client.query('COMMIT');
-      console.log(`✅ Referral milestone granted: ${referrerId} earned 1000 CIPHER for ${referredUserId}`);
+      console.log(`✅ Referral milestone granted: ${referrerId} earned 0.01 GRAM for ${referredUserId}`);
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('Error granting referral milestone:', error);
@@ -1448,7 +1448,7 @@ export class DatabaseStorage implements IStorage {
   // Rules:
   //  - 1 request per user per calendar day (UTC), regardless of outcome
   //  - Today's 30 daily ads (10 each across 3 ad providers) must be fully watched
-  //  - Without any prior CIPHER deposit: min 10,000 AXN, max 100,000 AXN / day
+  //  - Without any prior GRAM deposit: min 10,000 AXN, max 100,000 AXN / day
   //  - With a prior deposit: min 10,000 AXN, no daily maximum
   //  - Flat 10% fee is deducted; admin sends the net amount manually with a tx hash
   async getWithdrawalEligibility(userId: string): Promise<{
@@ -1499,7 +1499,7 @@ export class DatabaseStorage implements IStorage {
     );
 
     const depositRows = await pool.query(
-      `SELECT id FROM cipher_deposits WHERE user_id = $1 AND status = 'credited' LIMIT 1`,
+      `SELECT id FROM gram_deposits WHERE user_id = $1 AND status = 'credited' LIMIT 1`,
       [userId]
     );
     const hasDeposited = depositRows.rows.length > 0;
@@ -2347,7 +2347,7 @@ export class DatabaseStorage implements IStorage {
   async getUserReferralTasks(_userId: string): Promise<any[]> {
     return [];
   }
-  async claimReferralTask(_userId: string, _taskId: string): Promise<{ success: boolean; message: string; rewardAXN?: string; miningBoost?: string }> {
+  async claimReferralTask(_userId: string, _taskId: string): Promise<{ success: boolean; message: string; gramReward?: string; miningBoost?: string }> {
     return { success: false, message: 'Referral task system removed' };
   }
 
@@ -3188,17 +3188,17 @@ export class DatabaseStorage implements IStorage {
          WHERE id = $2
            AND COALESCE(balance::numeric, 0) >= $1
          RETURNING balance`,
-        [machineType.priceCipher, userId]
+        [machineType.priceGram, userId]
       );
 
       if (deductResult.rows.length === 0) {
         await client.query('ROLLBACK');
         // Fetch current balance only to give a helpful error message
         const balRow = await pool.query('SELECT balance FROM users WHERE id = $1', [userId]);
-        const have = Math.floor(parseFloat(balRow.rows[0]?.balance || '0'));
+        const have = parseFloat(balRow.rows[0]?.balance || '0');
         return {
           success: false,
-          message: `Insufficient CIPHER balance. Need ${machineType.priceCipher.toLocaleString()} CIPHER, have ${have.toLocaleString()} CIPHER`,
+          message: `Insufficient GRAM balance. Need ${machineType.priceGram} GRAM, have ${have.toFixed(6)} GRAM`,
         };
       }
 
