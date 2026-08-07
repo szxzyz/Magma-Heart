@@ -9,7 +9,7 @@ const TREASURY = "UQDeroBz4zvOntJ4xuMdiwFtNddMhJ4cGxghF9B7fYz50q8b";
 const CIPHER_PER_GRAM = 100_000;
 
 type Props = { onClose: () => void };
-type Status = "idle" | "sending" | "verifying" | "manualVerifying" | "success" | "error";
+type Status = "idle" | "sending" | "verifying" | "success" | "error";
 
 function parseError(error: any, fallback: string) {
   return error?.message || fallback;
@@ -47,6 +47,10 @@ export default function DepositPopup({ onClose }: Props) {
     return response.json();
   };
 
+  // Polls the backend, which independently re-verifies the payment on-chain
+  // (TONCenter + tonapi.io) each attempt. The same verification also runs in
+  // the background poller every 30s, so the deposit still gets detected,
+  // confirmed, and credited even if this popup is closed early.
   const waitForDeposit = async (depositId: string) => {
     for (let attempt = 0; attempt < 18; attempt += 1) {
       const response = await apiRequest("GET", `/api/cipher-deposit/status/${depositId}`);
@@ -59,7 +63,7 @@ export default function DepositPopup({ onClose }: Props) {
   };
 
   const buyCipher = async () => {
-    if (!connectedAddress || status === "sending" || status === "verifying" || status === "manualVerifying") return;
+    if (!connectedAddress || status === "sending" || status === "verifying") return;
     if (!/^[0-9]+$/.test(amount) || BigInt(amount) <= 0n) {
       setStatus("error");
       setMessage("Enter a whole CIPHER amount greater than 0.");
@@ -74,42 +78,24 @@ export default function DepositPopup({ onClose }: Props) {
         validUntil: Math.floor(Date.now() / 1000) + 1800,
         messages: [{ address: TREASURY, amount: purchase.tonAmountNano }],
       });
+      // Payment sent — the backend now automatically verifies it on-chain,
+      // confirms it, credits the CIPHER balance, and creates the deposit
+      // transaction record. We poll until that settlement completes.
       setStatus("verifying");
       const verified = await waitForDeposit(purchase.purchaseId);
       setStatus("success");
       setMessage(`Balance updated with ${Number(verified.cipherAmount).toLocaleString()} CIPHER.`);
+      // Refresh both the balance and the transaction history immediately so
+      // the new deposit record and updated balance show up right away.
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/withdrawals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
     } catch (error: any) {
       setStatus("error");
       setMessage(parseError(error, "Payment failed or could not be verified."));
     }
   };
 
-  const startManualTransfer = async () => {
-    if (!connectedAddress || status === "sending" || status === "verifying" || status === "manualVerifying") return;
-    if (!/^[0-9]+$/.test(amount) || BigInt(amount) <= 0n) {
-      setStatus("error");
-      setMessage("Enter a whole CIPHER amount greater than 0.");
-      return;
-    }
-
-    try {
-      setStatus("manualVerifying");
-      setMessage("");
-      const deposit = await createDeposit();
-      const verified = await waitForDeposit(deposit.purchaseId);
-      setStatus("success");
-      setMessage(`Manual transfer verified. ${Number(verified.cipherAmount).toLocaleString()} CIPHER credited.`);
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/withdrawals"] });
-    } catch (error: any) {
-      setStatus("error");
-      setMessage(parseError(error, "Manual transfer could not be verified."));
-    }
-  };
-
-  const busy = status === "sending" || status === "verifying" || status === "manualVerifying";
+  const busy = status === "sending" || status === "verifying";
   const grams = amount && /^[0-9]+$/.test(amount)
     ? (Number(amount) / CIPHER_PER_GRAM).toFixed(6).replace(/\.?0+$/, "")
     : "0";
@@ -191,10 +177,10 @@ export default function DepositPopup({ onClose }: Props) {
           </div>
         </div>
 
-        {status === "sending" || status === "verifying" || status === "manualVerifying" ? (
+        {status === "sending" || status === "verifying" ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#93c5fd", fontSize: 12, fontWeight: 700, marginTop: 14 }}>
             <Loader2 size={15} style={{ animation: "deposit-spin 1s linear infinite" }} />
-            {status === "sending" ? "Opening wallet…" : status === "manualVerifying" ? "Watching for your manual transfer…" : "Verifying payment on blockchain…"}
+            {status === "sending" ? "Opening wallet…" : "Verifying payment on blockchain…"}
           </div>
         ) : status === "success" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, color: "#4ade80", fontSize: 12, fontWeight: 700 }}>
@@ -213,16 +199,6 @@ export default function DepositPopup({ onClose }: Props) {
         >
           {status === "success" ? "Balance Updated" : "Buy CIPHER"}
         </button>
-        <button
-          onClick={startManualTransfer}
-          disabled={!connectedAddress || !amount || busy || status === "success"}
-          style={{ width: "100%", marginTop: 9, border: "none", borderRadius: 12, padding: "10px 0", background: "rgba(255,255,255,0.07)", color: connectedAddress && amount && !busy && status !== "success" ? "#dbeafe" : "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: 800, cursor: connectedAddress && amount && !busy ? "pointer" : "not-allowed" }}
-        >
-          I Sent GRAM Manually
-        </button>
-        <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, textAlign: "center", lineHeight: 1.4, marginTop: 9 }}>
-          Manual transfers are credited only when the sender and exact amount match this connected wallet.
-        </div>
         <style>{`@keyframes deposit-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     </PopupShell>
