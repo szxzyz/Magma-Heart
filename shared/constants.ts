@@ -1,5 +1,7 @@
 export const APP_VERSION = "1.0.0";
 export const AXN_TO_TON = 10000; // 10,000 AXN = 1 TON
+// Legacy helper aliases retained for older utility modules.
+export const Hrum_TO_TON = AXN_TO_TON;
 
 /**
  * Convert AXN to TON
@@ -20,6 +22,15 @@ export function tonToAXN(tonAmount: number | string): number {
   const numValue = typeof tonAmount === 'string' ? parseFloat(tonAmount) : tonAmount;
   return Math.round(numValue * AXN_TO_TON);
 }
+
+export function padTo(amount: number | string): number {
+  const value = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return value / Hrum_TO_TON;
+}
+
+export const padToTON = padTo;
+export const hrumTo = padTo;
+export const hrumTo$ = padTo;
 
 /**
  * Format large numbers into compact format (1k, 1.2M, 1B, 1T)
