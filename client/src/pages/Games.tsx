@@ -21,7 +21,7 @@ export default function Games() {
   const [showWithdrawPopup, setShowWithdrawPopup] = useState(false);
   const [showPromoPopup, setShowPromoPopup] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'axn' | 'cipher' | 'withdraw' | 'deposit'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'axn' | 'gram' | 'withdraw' | 'deposit'>('all');
 
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -53,11 +53,11 @@ export default function Games() {
   const botUsername = botInfo?.username || 'bot';
   const referralLink = user?.referralCode ? `https://t.me/${botUsername}?start=${user.referralCode}` : '';
 
-  // Friendly, human-readable labels for every AXN/CIPHER earning source so the
+  // Friendly, human-readable labels for every AXN/GRAM earning source so the
   // "Source" column in the transaction history is meaningful instead of raw
   // snake_case values from the database.
   const SOURCE_LABELS: Record<string, string> = {
-    cipher_deposit: 'Deposit',
+    gram_deposit: 'Deposit',
     nft_reward: 'NFT Reward',
     ad_watch: 'Ad Watch',
     ad_slot_watch: 'Ad Watch',
@@ -110,31 +110,31 @@ export default function Games() {
     })),
   ].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-  // Sources that credit the CIPHER balance (deposit, ad watch, tasks, daily
+  // Sources that credit the GRAM balance (deposit, ad watch, tasks, daily
   // rewards / streak, and invite-friends / referral rewards). Everything else
   // (withdrawals, fees, conversions, NFT activity) is settled in AXN.
-  const CIPHER_SOURCES = new Set([
+  const GRAM_SOURCES = new Set([
     'ad_watch', 'ad_slot_watch',
     'task_share', 'task_channel', 'task_community', 'task_claim', 'task_completion', 'daily_task_completion',
     'bonus_claim',
     'referral', 'referral_milestone', 'referral_deposit_commission', 'referral_backfill', 'invite_friend',
-    'cipher_deposit',
+    'gram_deposit',
   ]);
   const getEntryCurrency = (entry: { kind: 'transaction' | 'withdrawal'; source?: string; rewardType?: string }) => {
     if (entry.kind === 'withdrawal') return 'AXN';
-    if (entry.rewardType === 'CIPHER') return 'CIPHER';
+    if (entry.rewardType === 'GRAM') return 'GRAM';
     if (entry.rewardType === 'AXN') return 'AXN';
-    if (entry.source && CIPHER_SOURCES.has(entry.source)) return 'CIPHER';
+    if (entry.source && GRAM_SOURCES.has(entry.source)) return 'GRAM';
     return 'AXN';
   };
 
   // Assets page tabs — filter the transaction history by type.
   // ALL: everything. AXN: AXN credits (NFT machine claims / promo etc, not withdrawals).
-  // CIPHER: CIPHER credits only. WITHDRAW: AXN withdrawals. DEPOSIT: CIPHER deposits.
+  // GRAM: GRAM credits only. WITHDRAW: AXN withdrawals. DEPOSIT: GRAM deposits.
   const ASSET_TABS: { id: typeof activeTab; label: string }[] = [
     { id: 'all',      label: 'All' },
     { id: 'axn',      label: 'AXN' },
-    { id: 'cipher',   label: 'CIPHER' },
+    { id: 'gram',     label: 'GRAM' },
     { id: 'withdraw', label: 'Withdraw' },
     { id: 'deposit',  label: 'Deposit' },
   ];
@@ -142,18 +142,17 @@ export default function Games() {
   const filteredTransactionHistory = transactionHistory.filter((entry) => {
     if (activeTab === 'all') return true;
     if (activeTab === 'withdraw') return entry.kind === 'withdrawal';
-    if (activeTab === 'deposit') return entry.source === 'cipher_deposit';
+    if (activeTab === 'deposit') return entry.source === 'gram_deposit';
     // AXN tab covers every AXN-denominated activity — claims, farming/NFT
     // rewards, AXN-side referral rewards, AND AXN withdrawals (and AXN
     // deposits, if any exist) — not just credit-type transactions.
     if (activeTab === 'axn') return getEntryCurrency(entry) === 'AXN';
-    if (activeTab === 'cipher') return entry.kind === 'transaction' && getEntryCurrency(entry) === 'CIPHER';
+    if (activeTab === 'gram') return entry.kind === 'transaction' && getEntryCurrency(entry) === 'GRAM';
     return true;
   });
 
-  // Deposits, withdrawals, and AXN entries all show their GRAM equivalent
-  // (same 100,000 : 1 AXN/CIPHER-to-GRAM rate) alongside amount/status/source.
-  const showGramValue = activeTab === 'withdraw' || activeTab === 'deposit' || activeTab === 'axn';
+  // AXN entries show their GRAM equivalent. GRAM entries already use GRAM.
+  const showGramValue = activeTab === 'withdraw' || activeTab === 'axn';
 
   // Normalize the many raw status strings (pending/approved/rejected/failed/
   // completed/credited/...) down to the three the AXN tab is expected to show.

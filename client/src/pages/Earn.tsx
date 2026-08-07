@@ -29,9 +29,9 @@ type ProviderStatusMap = Partial<Record<ProviderKey, ProviderStatus>>;
 type EarnTab = 'ads' | 'social' | 'partner' | 'bot';
 
 const AD_TASKS: { slotId: number; provider: AdProvider; statusKey: ProviderKey; reward: number; dailyLimit: number }[] = [
-  { slotId: 2, provider: 'AdsGram', statusKey: 'AdsGram', reward: 700, dailyLimit: 10 },
-  { slotId: 1, provider: 'Monetag', statusKey: 'Monetag', reward: 500, dailyLimit: 10 },
-  { slotId: 3, provider: 'Gigapub', statusKey: 'Gigapub', reward: 500, dailyLimit: 10 },
+  { slotId: 2, provider: 'AdsGram', statusKey: 'AdsGram', reward: 0.007, dailyLimit: 10 },
+  { slotId: 1, provider: 'Monetag', statusKey: 'Monetag', reward: 0.005, dailyLimit: 10 },
+  { slotId: 3, provider: 'Gigapub', statusKey: 'Gigapub', reward: 0.005, dailyLimit: 10 },
 ];
 async function runAdForProvider(provider: AdProvider): Promise<void> {
   if (provider === 'Monetag') await showMonatagRewardedAd();
@@ -83,7 +83,7 @@ function AdProviderRow({
     try {
       const res = await apiRequest('POST', '/api/ads/slot-watch', { slot: slotId });
       const data = await res.json();
-      const earned = Number(data.rewardAXN ?? reward);
+      const earned = Number(data.rewardGram ?? reward);
       const nextWatched = Number(data.currentCount ?? (status?.watched ?? 0) + 1);
       updateProviderCache(queryClient, statusKey, {
         watched: nextWatched,
@@ -92,10 +92,10 @@ function AdProviderRow({
       });
       queryClient.setQueryData(['/api/auth/user'], (old: any) => {
         if (!old) return old;
-        return { ...old, balance: String(Math.floor(parseFloat(old.balance || '0') + earned)) };
+        return { ...old, balance: String(parseFloat(old.balance || '0') + earned) };
       });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-      showNotification(`+${earned.toLocaleString()} CIPHER earned!`, 'success');
+      showNotification(`+${earned.toLocaleString(undefined, { maximumFractionDigits: 6 })} GRAM earned!`, 'success');
     } catch (error: any) {
       let message = 'Failed to claim. Try again.';
       try { const parsed = JSON.parse(error.message); if (parsed.message) message = parsed.message; } catch {}
@@ -140,11 +140,10 @@ function AdProviderRow({
           <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 3 }}>REWARD</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#0a0a0a', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <img src="/cipher-icon.png" alt="CIPHER" style={{ width: '90%', height: '90%', objectFit: 'contain' }} />
             </div>
             <span style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>
-              {reward.toLocaleString()}
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 600, marginLeft: 3 }}>CIPHER</span>
+              {reward.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 600, marginLeft: 3 }}>GRAM</span>
             </span>
           </div>
         </div>
@@ -191,10 +190,10 @@ function AxnNameTaskDaily({ claimedToday }: { claimedToday: boolean }) {
       const data = await res.json();
       if (data.success) {
         setDone(true);
-        showNotification(data.message || '+1000 CIPHER earned!', 'success');
+        showNotification(data.message || '+0.01 GRAM earned!', 'success');
         queryClient.setQueryData(['/api/auth/user'], (old: any) => {
           if (!old) return old;
-          return { ...old, balance: String(Math.floor(parseFloat(old.balance || '0') + 1000)), axnNameClaimedToday: true };
+          return { ...old, balance: String(parseFloat(old.balance || '0') + 0.01), axnNameClaimedToday: true };
         });
         queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       } else {
@@ -218,7 +217,7 @@ function AxnNameTaskDaily({ claimedToday }: { claimedToday: boolean }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           <span style={{ color: TEXT, fontSize: 14, fontWeight: 800 }}>Add $AXN to your name</span>
-          <span style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 5, color: BLUE, fontSize: 10, fontWeight: 800, padding: '2px 6px' }}>+1000 CIPHER</span>
+          <span style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 5, color: BLUE, fontSize: 10, fontWeight: 800, padding: '2px 6px' }}>+0.01 GRAM</span>
         </div>
       </div>
       <div style={{ flexShrink: 0 }}>
@@ -260,10 +259,10 @@ function PartnerTaskRow({ task }: { task: any }) {
       const data = await res.json();
       if (data.success !== false) {
         setDone(true);
-        showNotification(`+${task.rewardAxn} CIPHER earned!`, 'success');
+        showNotification(`+${task.gramReward} GRAM earned!`, 'success');
         queryClient.setQueryData(['/api/auth/user'], (old: any) => {
           if (!old) return old;
-          return { ...old, balance: String(Math.floor(parseFloat(old.balance || '0') + (task.rewardAxn || 0))) };
+          return { ...old, balance: String(parseFloat(old.balance || '0') + Number(task.gramReward || 0)) };
         });
         queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         queryClient.invalidateQueries({ queryKey: ['/api/bounty-tasks'] });
@@ -293,7 +292,7 @@ function PartnerTaskRow({ task }: { task: any }) {
       </div>
       <div style={{ flexShrink: 0 }}>
         {!clicked ? (
-          <span style={{ background: 'rgba(37,99,235,0.15)', borderRadius: 8, color: BLUE, fontSize: 11, fontWeight: 800, padding: '5px 9px', display: 'inline-block' }}>+{task.rewardAxn} CIPHER</span>
+          <span style={{ background: 'rgba(37,99,235,0.15)', borderRadius: 8, color: BLUE, fontSize: 11, fontWeight: 800, padding: '5px 9px', display: 'inline-block' }}>+{task.gramReward} GRAM</span>
         ) : (
           <button onClick={handleClaim} disabled={claiming} style={{ background: claiming ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, #16a34a, #22c55e)', border: 'none', borderRadius: 10, padding: '9px 12px', fontSize: 12, fontWeight: 800, color: claiming ? TEXT_DIM : '#fff', cursor: claiming ? 'not-allowed' : 'pointer', boxShadow: claiming ? 'none' : '0 2px 12px rgba(34,197,94,0.35)' }} className="active:scale-95 transition-transform">
             {claiming ? '…' : 'CLAIM'}
@@ -331,10 +330,10 @@ function UserTaskRow({ task }: { task: any }) {
       const data = await res.json();
       if (data.success) {
         setDone(true);
-        showNotification(`+${task.reward_per_completion} CIPHER earned!`, 'success');
+        showNotification(`+${task.reward_per_completion} GRAM earned!`, 'success');
         queryClient.setQueryData(['/api/auth/user'], (old: any) => {
           if (!old) return old;
-          return { ...old, balance: String(Math.floor(parseFloat(old.balance || '0') + (task.reward_per_completion || 100))) };
+          return { ...old, balance: String(parseFloat(old.balance || '0') + Number(task.reward_per_completion || 0)) };
         });
         queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         queryClient.invalidateQueries({ queryKey: ['/api/user-tasks'] });
@@ -365,7 +364,7 @@ function UserTaskRow({ task }: { task: any }) {
       </div>
       <div style={{ flexShrink: 0 }}>
         {!clicked ? (
-          <span style={{ background: 'rgba(168,85,247,0.15)', borderRadius: 8, color: '#a855f7', fontSize: 11, fontWeight: 800, padding: '5px 9px', display: 'inline-block' }}>+{task.reward_per_completion} CIPHER</span>
+          <span style={{ background: 'rgba(168,85,247,0.15)', borderRadius: 8, color: '#a855f7', fontSize: 11, fontWeight: 800, padding: '5px 9px', display: 'inline-block' }}>+{task.reward_per_completion} GRAM</span>
         ) : (
           <button onClick={handleClaim} disabled={claiming} style={{ background: claiming ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, #16a34a, #22c55e)', border: 'none', borderRadius: 10, padding: '9px 12px', fontSize: 12, fontWeight: 800, color: claiming ? TEXT_DIM : '#fff', cursor: claiming ? 'not-allowed' : 'pointer', boxShadow: claiming ? 'none' : '0 2px 12px rgba(34,197,94,0.35)' }} className="active:scale-95 transition-transform">
             {claiming ? '…' : 'CLAIM'}
@@ -408,7 +407,7 @@ function _RemovedAddMissionPopup({ onClose, userBalance, isAdmin }: { onClose: (
   const handleCreate = async () => {
     if (!title.trim()) { showNotification('Enter a task name', 'error'); return; }
     if (!link.trim()) { showNotification('Enter a task link', 'error'); return; }
-    if (!canAfford) { showNotification(`Insufficient balance. Need ${totalCost} CIPHER`, 'error'); return; }
+    if (!canAfford) { showNotification(`Insufficient balance. Need ${totalCost} GRAM`, 'error'); return; }
     setLoading(true);
     try {
       const res = await apiRequest('POST', '/api/user-tasks', { title: title.trim(), link: link.trim(), category, impressions: imp });
@@ -433,7 +432,7 @@ function _RemovedAddMissionPopup({ onClose, userBalance, isAdmin }: { onClose: (
     if (!pTitle.trim()) { showNotification('Enter a title', 'error'); return; }
     setPLoading(true);
     try {
-      const res = await apiRequest('POST', '/api/admin/partner-tasks', { title: pTitle.trim(), description: pDesc.trim(), url: pUrl.trim(), rewardAxn: parseInt(pReward, 10), totalImpressions: parseInt(pImpressions, 10) });
+      const res = await apiRequest('POST', '/api/admin/partner-tasks', { title: pTitle.trim(), description: pDesc.trim(), url: pUrl.trim(), gramReward: parseFloat(pReward), totalImpressions: parseInt(pImpressions, 10) });
       const data = await res.json();
       if (data.success) {
         showNotification('Partner task created!', 'success');
@@ -535,8 +534,8 @@ function _RemovedAddMissionPopup({ onClose, userBalance, isAdmin }: { onClose: (
 
               {/* Cost summary inline — no "Total" label */}
               <div style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(59,130,246,0.12)', borderRadius: 11, padding: '9px 13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: TEXT_DIM, fontSize: 12 }}>{imp} impressions × 35 CIPHER</span>
-                <span style={{ color: canAfford ? BLUE : '#f87171', fontSize: 13, fontWeight: 900 }}>{totalCost} CIPHER</span>
+                <span style={{ color: TEXT_DIM, fontSize: 12 }}>{imp} impressions × 0.00035 GRAM</span>
+                <span style={{ color: canAfford ? BLUE : '#f87171', fontSize: 13, fontWeight: 900 }}>{totalCost} GRAM</span>
               </div>
 
               {/* Warning — indigo color */}
@@ -564,7 +563,7 @@ function _RemovedAddMissionPopup({ onClose, userBalance, isAdmin }: { onClose: (
                 className={loading || !canAfford ? '' : 'active:scale-95 transition-transform'}
               >
                 {loading && <span style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
-                {loading ? 'Publishing…' : `Publish · ${totalCost} CIPHER`}
+                {loading ? 'Publishing…' : `Publish · ${totalCost} GRAM`}
               </button>
             </div>
           )}
@@ -580,7 +579,7 @@ function _RemovedAddMissionPopup({ onClose, userBalance, isAdmin }: { onClose: (
               <input value={pDesc} onChange={e => setPDesc(e.target.value)} placeholder="Short description (optional)" style={inputStyle} />
               <input value={pUrl} onChange={e => setPUrl(e.target.value)} placeholder="https://..." style={inputStyle} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <input type="number" value={pReward} onChange={e => setPReward(e.target.value)} placeholder="Reward (CIPHER)" min={1} style={inputStyle} />
+                <input type="number" value={pReward} onChange={e => setPReward(e.target.value)} placeholder="Reward (GRAM)" min={0} step="0.00001" style={inputStyle} />
                 <input type="number" value={pImpressions} onChange={e => setPImpressions(e.target.value)} placeholder="Impressions" min={0} style={inputStyle} />
               </div>
               <button
@@ -653,7 +652,7 @@ function MyMissionRow({ task, isLast, onDeleted }: { task: any; isLast: boolean;
       const res = await apiRequest('DELETE', `/api/my-tasks/${task.id}`, {});
       const data = await res.json();
       if (data.success) {
-        showNotification(data.message || `Deleted! +${refundAmount} CIPHER refunded.`, 'success');
+        showNotification(data.message || `Deleted! +${refundAmount} GRAM refunded.`, 'success');
         queryClient.invalidateQueries({ queryKey: ['/api/my-tasks'] });
         queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         onDeleted();
@@ -712,7 +711,7 @@ function MyMissionRow({ task, isLast, onDeleted }: { task: any; isLast: boolean;
         {showConfirm && (
           <div style={{ marginTop: 10, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '10px 12px' }}>
             <div style={{ color: '#fca5a5', fontSize: 11, marginBottom: 8, lineHeight: 1.4 }}>
-              Delete this mission?{remaining > 0 ? ` You'll get back ${refundAmount} CIPHER (${remaining} unused impressions × 35).` : ' No refund — all impressions used.'}
+              Delete this mission?{remaining > 0 ? ` You'll get back ${refundAmount} GRAM (${remaining} unused impressions × 0.00035).` : ' No refund — all impressions used.'}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={handleDelete} disabled={deleting} style={{ flex: 1, padding: '7px 0', background: 'rgba(239,68,68,0.6)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>

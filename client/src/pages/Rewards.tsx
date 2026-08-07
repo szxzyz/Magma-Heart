@@ -415,7 +415,7 @@ export default function Rewards() {
     onSuccess: (data) => {
       setDailyChecked(true);
       localStorage.setItem('daily_check_date', getTodayKey());
-      showNotification(`Daily check-in done! +${data.reward ?? 100} CIPHER added`, 'success');
+      showNotification(`Daily check-in done! +${data.reward ?? 0.001} GRAM added`, 'success');
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
     },
     onError: (err: any) => {
@@ -466,7 +466,7 @@ export default function Rewards() {
 
   const handleMysteryClaim = () => {
     if (mysteryPhase !== 'revealed') return;
-    showNotification(`Mystery Gift! You won ${mysteryReward} CIPHER!`, 'success');
+    showNotification(`Mystery Gift! You won ${mysteryReward} GRAM!`, 'success');
     setMysteryPhase('done');
     mysteryTimerRef.current = setTimeout(() => setMysteryPhase('idle'), 1800);
   };
@@ -559,7 +559,7 @@ export default function Rewards() {
             </svg>
             <div style={{ flex: 1 }}>
               <div style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>Daily Check-In</div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>Earn 100 CIPHER</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>Earn 0.001 GRAM</div>
             </div>
             <button
               onClick={handleDailyCheck}
@@ -594,7 +594,7 @@ export default function Rewards() {
             <div style={{ flex: 1 }}>
               <div style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>Mystery Gift</div>
               <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>
-                Win 1–1000 CIPHER · Watch 2 ads · {Math.max(0, MYSTERY_DAILY_LIMIT - mysteryClaimsToday)}/{MYSTERY_DAILY_LIMIT} left today
+                Win 0.00001–0.01 GRAM · Watch 2 ads · {Math.max(0, MYSTERY_DAILY_LIMIT - mysteryClaimsToday)}/{MYSTERY_DAILY_LIMIT} left today
               </div>
             </div>
             <button
@@ -811,7 +811,7 @@ export default function Rewards() {
               {(mysteryPhase === 'revealed' || mysteryPhase === 'claiming') && (
                 <div style={{ animation: 'rewardIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both' }}>
                   <div style={{ fontSize: 52, fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '-2px' }}>{mysteryReward}</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: '#3b82f6', marginTop: 6 }}>CIPHER</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#3b82f6', marginTop: 6 }}>GRAM</div>
                 </div>
               )}
               {mysteryPhase === 'done' && (
@@ -826,15 +826,15 @@ export default function Rewards() {
 
             <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginBottom: 6 }}>
               {mysteryPhase === 'opening' ? 'Opening box...'
-                : mysteryPhase === 'revealed' ? `You won ${mysteryReward} CIPHER!`
+                : mysteryPhase === 'revealed' ? `You won ${mysteryReward} GRAM!`
                 : mysteryPhase === 'claiming' ? 'Claiming...'
                 : 'Reward Claimed!'}
             </div>
             <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 13, marginBottom: 28 }}>
               {mysteryPhase === 'opening' ? 'Wait for your prize...'
-                : mysteryPhase === 'revealed' ? 'Tap below to claim your CIPHER'
+                : mysteryPhase === 'revealed' ? 'Tap below to claim your GRAM'
                 : mysteryPhase === 'claiming' ? 'Please wait...'
-                : 'CIPHER added to your balance'}
+                : 'GRAM added to your balance'}
             </div>
 
             {mysteryPhase === 'revealed' && (
@@ -845,7 +845,7 @@ export default function Rewards() {
                 fontSize: 14, fontWeight: 800, cursor: 'pointer',
                 boxShadow: '0 4px 20px rgba(37,99,235,0.4)',
               }} className="active:scale-95 transition-transform">
-                Claim {mysteryReward} CIPHER
+                Claim {mysteryReward} GRAM
               </button>
             )}
             {(mysteryPhase === 'opening' || mysteryPhase === 'claiming') && (

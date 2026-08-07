@@ -9,6 +9,7 @@ const BLUE_D = '#2563eb';
 const TEXT = '#fff';
 const TEXT_DIM = 'rgba(255,255,255,0.35)';
 const CARD = 'rgba(255,255,255,0.07)';
+const COST_PER_IMPRESSION_GRAM = 0.00035;
 
 const inputStyle: Record<string, any> = {
   width: '100%', background: 'rgba(255,255,255,0.06)',
@@ -24,7 +25,7 @@ function MyMissionRow({ task, isLast, onDeleted }: { task: any; isLast: boolean;
   const progress = task.completed_count || 0;
   const total = task.impressions || 0;
   const remaining = total - progress;
-  const refundAmount = remaining * 35;
+  const refundAmount = remaining * COST_PER_IMPRESSION_GRAM;
   const pct = total > 0 ? Math.min(100, Math.round((progress / total) * 100)) : 0;
 
   const statusColor: Record<string, string> = {
@@ -49,7 +50,7 @@ function MyMissionRow({ task, isLast, onDeleted }: { task: any; isLast: boolean;
       const res = await apiRequest('DELETE', `/api/my-tasks/${task.id}`, {});
       const data = await res.json();
       if (data.success) {
-        showNotification(data.message || `Deleted! +${refundAmount} CIPHER refunded.`, 'success');
+        showNotification(data.message || `Deleted! +${refundAmount} GRAM refunded.`, 'success');
         queryClient.invalidateQueries({ queryKey: ['/api/my-tasks'] });
         queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         onDeleted();
@@ -104,7 +105,7 @@ function MyMissionRow({ task, isLast, onDeleted }: { task: any; isLast: boolean;
         {showConfirm && (
           <div style={{ marginTop: 10, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '10px 12px' }}>
             <div style={{ color: '#fca5a5', fontSize: 11, marginBottom: 8, lineHeight: 1.4 }}>
-              Delete this mission?{remaining > 0 ? ` You'll get back ${refundAmount} CIPHER (${remaining} unused × 35).` : ' No refund — all impressions used.'}
+      Delete this mission?{remaining > 0 ? ` You'll get back ${refundAmount} GRAM (${remaining} unused × 0.00035).` : ' No refund — all impressions used.'}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={handleDelete} disabled={deleting} style={{ flex: 1, padding: '7px 0', background: 'rgba(239,68,68,0.6)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
@@ -131,14 +132,14 @@ function AddMissionForm({ userBalance }: { userBalance: number }) {
   const queryClient = useQueryClient();
 
   const imp = Math.max(10, parseInt(impressions, 10) || 10);
-  const totalCost = imp * 35;
+  const totalCost = imp * COST_PER_IMPRESSION_GRAM;
   const canAfford = userBalance >= totalCost;
   const titlePlaceholder = category === 'channel_group' ? 'Join My Channel' : 'Visit My Website / Bot';
 
   const handleCreate = async () => {
     if (!title.trim()) { showNotification('Enter a task name', 'error'); return; }
     if (!link.trim()) { showNotification('Enter a task link', 'error'); return; }
-    if (!canAfford) { showNotification(`Insufficient balance. Need ${totalCost} CIPHER`, 'error'); return; }
+    if (!canAfford) { showNotification(`Insufficient balance. Need ${totalCost} GRAM`, 'error'); return; }
     setLoading(true);
     try {
       const res = await apiRequest('POST', '/api/user-tasks', { title: title.trim(), link: link.trim(), category, impressions: imp });
@@ -164,7 +165,7 @@ function AddMissionForm({ userBalance }: { userBalance: number }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
       <div>
         <div style={{ fontSize: 16, fontWeight: 900, color: TEXT }}>Promote Your Channel or Bot</div>
-        <div style={{ fontSize: 12, color: TEXT_DIM, marginTop: 3 }}>Pay CIPHER to show your task to all users.</div>
+        <div style={{ fontSize: 12, color: TEXT_DIM, marginTop: 3 }}>Pay GRAM to show your task to all users.</div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -190,8 +191,8 @@ function AddMissionForm({ userBalance }: { userBalance: number }) {
       />
 
       <div style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(59,130,246,0.12)', borderRadius: 11, padding: '9px 13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ color: TEXT_DIM, fontSize: 12 }}>{imp} impressions × 35 CIPHER</span>
-        <span style={{ color: canAfford ? BLUE : '#f87171', fontSize: 13, fontWeight: 900 }}>{totalCost} CIPHER</span>
+        <span style={{ color: TEXT_DIM, fontSize: 12 }}>{imp} impressions × 0.00035 GRAM</span>
+        <span style={{ color: canAfford ? BLUE : '#f87171', fontSize: 13, fontWeight: 900 }}>{totalCost} GRAM</span>
       </div>
 
       <div style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 11, padding: '9px 12px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
@@ -207,7 +208,7 @@ function AddMissionForm({ userBalance }: { userBalance: number }) {
       <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 11, padding: '9px 13px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
           <span style={{ color: TEXT_DIM }}>Your balance</span>
-          <span style={{ color: canAfford ? TEXT : '#f87171', fontWeight: 800 }}>{userBalance} CIPHER</span>
+          <span style={{ color: canAfford ? TEXT : '#f87171', fontWeight: 800 }}>{userBalance} GRAM</span>
         </div>
       </div>
 
@@ -225,7 +226,7 @@ function AddMissionForm({ userBalance }: { userBalance: number }) {
         className={loading || !canAfford ? '' : 'active:scale-95 transition-transform'}
       >
         {loading && <span style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
-        {loading ? 'Publishing…' : `Publish · ${totalCost} CIPHER`}
+        {loading ? 'Publishing…' : `Publish · ${totalCost} GRAM`}
       </button>
     </div>
   );
@@ -249,7 +250,7 @@ function AdminPartnerTaskForm() {
         title: pTitle.trim(),
         description: pDesc.trim(),
         url: pUrl.trim(),
-        rewardAxn: parseInt(pReward, 10),
+        gramReward: parseFloat(pReward),
         totalImpressions: parseInt(pImpressions, 10),
       });
       const data = await res.json();
@@ -277,7 +278,7 @@ function AdminPartnerTaskForm() {
       <input value={pDesc} onChange={e => setPDesc(e.target.value)} placeholder="Short description (optional)" style={inputStyle} />
       <input value={pUrl} onChange={e => setPUrl(e.target.value)} placeholder="https://..." style={inputStyle} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <input type="number" value={pReward} onChange={e => setPReward(e.target.value)} placeholder="Reward (CIPHER)" min={1} style={inputStyle} />
+        <input type="number" value={pReward} onChange={e => setPReward(e.target.value)} placeholder="Reward (GRAM)" min={0} step="0.00001" style={inputStyle} />
         <input type="number" value={pImpressions} onChange={e => setPImpressions(e.target.value)} placeholder="Max Impressions" min={0} style={inputStyle} />
       </div>
       <button
@@ -339,7 +340,7 @@ export default function AddMission() {
           <div style={{ fontSize: 11, color: TEXT_DIM }}>Promote your channel or bot</div>
         </div>
         <div style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 8, padding: '5px 10px' }}>
-          <span style={{ color: BLUE, fontSize: 12, fontWeight: 800 }}>{userBalance} CIPHER</span>
+          <span style={{ color: BLUE, fontSize: 12, fontWeight: 800 }}>{userBalance} GRAM</span>
         </div>
       </div>
 

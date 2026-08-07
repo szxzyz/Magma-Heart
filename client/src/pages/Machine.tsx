@@ -114,14 +114,14 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
 }
 
 // ─── Confirm Popup ───────────────────────────────────────────────────
-function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: {
+function ConfirmPopup({ machine, gramBalance, onConfirm, onCancel, loading }: {
   machine: MachineType;
-  cipherBalance: number;
+  gramBalance: number;
   onConfirm: () => void;
   onCancel: () => void;
   loading: boolean;
 }) {
-  const canAfford = cipherBalance >= machine.priceCipher;
+  const canAfford = gramBalance >= machine.priceGram;
 
   return (
     <PopupShell onClose={onCancel} maxWidth={480}>
@@ -135,7 +135,7 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
         }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 14, textAlign: "center" }}>{machine.name}</div>
           {[
-            { label: "Price",     value: `${machine.priceCipher.toLocaleString()} CIPHER` },
+            { label: "Price",     value: `${machine.priceGram} GRAM` },
             { label: "Duration",  value: `${machine.durationDays} days` },
             { label: "Hourly",    value: `${fmtNum(machine.hourlyAxn)} AXN/hr` },
             { label: "Daily",     value: `${fmtNum(machine.dailyAxn)} AXN/day` },
@@ -153,7 +153,7 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
             <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>Your Balance</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: canAfford ? "#4ade80" : "#f87171" }}>
-              {Math.floor(cipherBalance).toLocaleString()} CIPHER
+              {gramBalance.toLocaleString(undefined, { maximumFractionDigits: 6 })} GRAM
             </span>
           </div>
         </div>
@@ -164,7 +164,7 @@ function ConfirmPopup({ machine, cipherBalance, onConfirm, onCancel, loading }: 
             borderRadius: 10, padding: "10px 14px", marginBottom: 14,
             fontSize: 12, color: "#f87171", textAlign: "center",
           }}>
-            Insufficient CIPHER. Need {machine.priceCipher.toLocaleString()} CIPHER.
+            Insufficient GRAM. Need {machine.priceGram} GRAM.
           </div>
         )}
 
@@ -219,7 +219,7 @@ export default function MachinePage() {
     return counts;
   }, {});
   const getLevel = (machineType: string) => Math.min(10, levels[machineType] || 0);
-  const cipherBalance = parseFloat(user?.balance || "0");
+  const gramBalance = parseFloat(user?.balance || "0");
 
   const buyMutation = useMutation({
     mutationFn: async (machineType: string) => {
@@ -258,7 +258,7 @@ export default function MachinePage() {
             <span style={{ color: "#3b82f6" }}>Marketplace</span>
           </div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 4, lineHeight: 1.5 }}>
-            Buy NFTs using CIPHER. Manage farming progress and claim AXN on the Rewards page.
+             Buy NFTs using GRAM. Manage farming progress and claim AXN on the Rewards page.
           </div>
         </div>
 
@@ -292,7 +292,7 @@ export default function MachinePage() {
       {confirmMachine && (
         <ConfirmPopup
           machine={confirmMachine}
-          cipherBalance={cipherBalance}
+          gramBalance={gramBalance}
           onConfirm={() => buyMutation.mutate(confirmMachine.id)}
           onCancel={() => setConfirmMachine(null)}
           loading={buyMutation.isPending}

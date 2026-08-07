@@ -1144,7 +1144,7 @@ function SettingsSection() {
       {cat === "affiliates" && (
         <SettCard title="Referral Rewards" icon={<GitBranch className="w-3.5 h-3.5" />} color="text-teal-400">
           <p className="text-[11px] text-gray-400 leading-relaxed">
-            Referral rewards are fixed and distributed automatically. The inviter receives <strong className="text-white">1,000 CIPHER</strong> when the referred friend collects <strong className="text-white">100 AXN</strong>, plus a <strong className="text-white">5% deposit commission</strong> calculated from the referred friend’s TON deposit converted to CIPHER.
+            Referral rewards are fixed and distributed automatically. The inviter receives <strong className="text-white">0.01 GRAM</strong> when the referred friend collects <strong className="text-white">100 AXN</strong>, plus a <strong className="text-white">5% deposit commission</strong> calculated from the referred friend’s TON deposit.
           </p>
         </SettCard>
       )}
@@ -1260,7 +1260,7 @@ function PromoSection() {
   const [code, setCode] = useState('');
   const [amount, setAmount] = useState('');
   const [maxUses, setMaxUses] = useState('');
-  const [currency, setCurrency] = useState<'CIPHER' | 'AXN'>('CIPHER');
+  const [currency, setCurrency] = useState<'GRAM' | 'AXN'>('GRAM');
   const [creating, setCreating] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
@@ -1276,7 +1276,7 @@ function PromoSection() {
       return;
     }
     setCreating(true);
-    const finalCode = code.trim().toUpperCase() || ((currency === 'CIPHER' ? 'CIPHER' : 'AXN') + Math.random().toString(36).slice(2, 7).toUpperCase());
+    const finalCode = code.trim().toUpperCase() || ((currency === 'GRAM' ? 'GRAM' : 'AXN') + Math.random().toString(36).slice(2, 7).toUpperCase());
     try {
       const res = await apiRequest('POST', '/api/admin/promo-codes', {
         code: finalCode,
@@ -1309,7 +1309,7 @@ function PromoSection() {
   };
 
   const currencyColor = (type: string) =>
-    type === 'CIPHER' ? 'text-purple-400' : type === 'AXN' ? 'text-blue-400' : 'text-gray-400';
+    type === 'GRAM' ? 'text-purple-400' : type === 'AXN' ? 'text-blue-400' : 'text-gray-400';
   const currencyLabel = (type: string) => type || 'AXN';
 
   return (
@@ -1323,13 +1323,13 @@ function PromoSection() {
         <div className="space-y-1">
           <Label className="text-xs text-white font-medium">Reward Currency</Label>
           <div className="grid grid-cols-2 gap-2">
-            {(['CIPHER', 'AXN'] as const).map(c => (
+            {(['GRAM', 'AXN'] as const).map(c => (
               <button
                 key={c}
                 onClick={() => setCurrency(c)}
                 className={`py-2 rounded-lg text-xs font-bold transition-all border ${
                   currency === c
-                    ? c === 'CIPHER'
+                    ? c === 'GRAM'
                       ? 'bg-purple-600/20 border-purple-500 text-purple-300'
                       : 'bg-blue-600/20 border-blue-500 text-blue-300'
                     : 'bg-white/5 border-white/10 text-gray-400'
@@ -1340,7 +1340,7 @@ function PromoSection() {
             ))}
           </div>
           <p className="text-[10px] text-gray-500 mt-1">
-            {currency === 'CIPHER' ? '🟣 CIPHER — earning balance (ads, tasks)' : '🔵 AXN — wallet balance (withdrawable)'}
+            {currency === 'GRAM' ? '🟣 GRAM — earning balance (ads, tasks)' : '🔵 AXN — wallet balance (withdrawable)'}
           </p>
         </div>
 
@@ -1358,7 +1358,7 @@ function PromoSection() {
           <Label className="text-xs text-white font-medium">{currency} Reward Amount</Label>
           <Input
             type="number"
-            placeholder={currency === 'CIPHER' ? 'e.g. 500' : 'e.g. 100'}
+            placeholder={currency === 'GRAM' ? 'e.g. 0.01' : 'e.g. 100'}
             value={amount}
             onChange={e => setAmount(e.target.value)}
             className="h-8 text-xs bg-[#0a0a0a] border-white/10"
@@ -1376,7 +1376,7 @@ function PromoSection() {
           />
         </div>
 
-        <Button size="sm" onClick={handleCreate} disabled={creating} className={`w-full h-8 text-xs ${currency === 'CIPHER' ? 'bg-purple-700 hover:bg-purple-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+        <Button size="sm" onClick={handleCreate} disabled={creating} className={`w-full h-8 text-xs ${currency === 'GRAM' ? 'bg-purple-700 hover:bg-purple-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
           {creating ? 'Creating...' : `✅ Create ${currency} Promo Code`}
         </Button>
       </div>
@@ -1435,7 +1435,7 @@ function PartnerTasksSection({ tasks, onRefresh }: { tasks: any[]; onRefresh: ()
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState<Record<number, string>>({});
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ title: '', description: '', url: '', rewardAxn: '50', totalImpressions: '0' });
+  const [form, setForm] = useState({ title: '', description: '', url: '', gramReward: '0.002', totalImpressions: '0' });
   const [creating, setCreating] = useState(false);
 
   const taskList = Array.isArray(tasks) ? tasks : [];
@@ -1480,7 +1480,7 @@ function PartnerTasksSection({ tasks, onRefresh }: { tasks: any[]; onRefresh: ()
   };
 
   const handleCreate = async () => {
-    if (!form.title.trim() || !parseInt(form.rewardAxn)) {
+    if (!form.title.trim() || !parseFloat(form.gramReward)) {
       toast({ title: 'Title and reward required', variant: 'destructive' });
       return;
     }
@@ -1490,13 +1490,13 @@ function PartnerTasksSection({ tasks, onRefresh }: { tasks: any[]; onRefresh: ()
         title: form.title.trim(),
         description: form.description.trim(),
         url: form.url.trim(),
-        rewardAxn: parseInt(form.rewardAxn),
+        gramReward: parseFloat(form.gramReward),
         totalImpressions: parseInt(form.totalImpressions) || 0,
       });
       const data = await res.json();
       if (data.success) {
         toast({ title: '✅ Partner Task Created' });
-        setForm({ title: '', description: '', url: '', rewardAxn: '50', totalImpressions: '0' });
+        setForm({ title: '', description: '', url: '', gramReward: '0.002', totalImpressions: '0' });
         setShowCreate(false);
         queryClient.invalidateQueries({ queryKey: ['/api/admin/partner-tasks'] });
         queryClient.invalidateQueries({ queryKey: ['/api/bounty-tasks'] });
@@ -1553,9 +1553,10 @@ function PartnerTasksSection({ tasks, onRefresh }: { tasks: any[]; onRefresh: ()
           />
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-[10px] text-gray-500 mb-1">Reward (CIPHER) *</p>
+              <p className="text-[10px] text-gray-500 mb-1">Reward (GRAM) *</p>
               <input
-                type="number" value={form.rewardAxn} onChange={e => setForm(f => ({ ...f, rewardAxn: e.target.value }))}
+                type="number" value={form.gramReward} onChange={e => setForm(f => ({ ...f, gramReward: e.target.value }))}
+                min={0} step="0.00001"
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-purple-500/50"
               />
             </div>
@@ -1614,7 +1615,7 @@ function PartnerTasksSection({ tasks, onRefresh }: { tasks: any[]; onRefresh: ()
                       <p className="text-[11px] text-gray-500 mt-0.5 truncate">{task.description}</p>
                     )}
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      <span className="text-[11px] text-purple-400 font-semibold">+{task.reward_axn} CIPHER</span>
+                      <span className="text-[11px] text-purple-400 font-semibold">+{task.gram_reward ?? task.gramReward} GRAM</span>
                       <span className="text-[11px] text-gray-500">{task.completed_count || 0}/{task.total_impressions || '∞'} completions</span>
                     </div>
                   </div>
@@ -1791,8 +1792,8 @@ function MissionsSection({ tasks, onRefresh }: { tasks: any[]; onRefresh: () => 
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
                   <span className="text-[11px] text-gray-500">{catLabel(task.category)}</span>
                   <span className="text-[11px] text-blue-400 font-semibold">{task.impressions} impressions</span>
-                  <span className="text-[11px] text-purple-400 font-semibold">+{task.reward_per_completion} CIPHER each</span>
-                  <span className="text-[11px] text-yellow-500 font-semibold">{task.total_cost} CIPHER paid</span>
+                  <span className="text-[11px] text-purple-400 font-semibold">+{task.reward_per_completion} GRAM each</span>
+                  <span className="text-[11px] text-yellow-500 font-semibold">{task.total_cost} GRAM paid</span>
                 </div>
               </div>
             </div>
