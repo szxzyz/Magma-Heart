@@ -865,6 +865,27 @@ export async function ensureDatabaseSchema(): Promise<void> {
       )
     `);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_user_farming_user_id ON user_farming(user_id)`);
+
+    // Ensure the unique constraint exists (safe, non-interactive — unlike
+    // `drizzle-kit push`, which prompts interactively and cannot run
+    // during an automated Render deploy).
+    try {
+      await db.execute(sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'user_farming_user_id_unique'
+          ) THEN
+            ALTER TABLE user_farming ADD CONSTRAINT user_farming_user_id_unique UNIQUE (user_id);
+          END IF;
+        END $$
+      `);
+      console.log('✅ [MIGRATION] user_farming_user_id_unique constraint ensured');
+    } catch (error) {
+      console.log('ℹ️ [MIGRATION] user_farming_user_id_unique constraint already exists or cannot be added:', error);
+    }
+
     console.log('✅ [MIGRATION] user_farming table ensured');
 
     // Mission system columns
