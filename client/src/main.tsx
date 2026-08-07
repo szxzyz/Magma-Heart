@@ -11,7 +11,7 @@ document.addEventListener("contextmenu", (e) => e.preventDefault());
 document.addEventListener("DOMContentLoaded", () => {
   document.body.style.webkitUserSelect = "none";
   document.body.style.userSelect = "none";
-  document.body.style.webkitTouchCallout = "none";
+  (document.body.style as CSSStyleDeclaration & { webkitTouchCallout?: string }).webkitTouchCallout = "none";
 });
 
 class RootErrorBoundary extends Component<
