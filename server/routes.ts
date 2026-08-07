@@ -26,6 +26,7 @@ import { config, getChannelConfig } from "./config";
 const connectedUsers = new Map<string, { socket: WebSocket; userId: string }>();
 
 const AXN_PER_TON = 100_000;
+const MIN_GRAM_DEPOSIT = 0.1;
 const REFERRAL_MILESTONE_AXN = 100;
 const REFERRAL_MILESTONE_REWARD_GRAM = 0.01;
 const REFERRAL_DEPOSIT_COMMISSION_RATE = 0.05;
@@ -235,9 +236,9 @@ async function settleGramDeposit(depositId: string): Promise<{
     await client.query(
       `INSERT INTO transactions (user_id, amount, type, source, description, metadata)
         VALUES ($1, $2, 'addition', 'gram_deposit', 'GRAM deposit credited',
-               jsonb_build_object('depositId', $3, 'paymentHash', $4, 'tonAmountNano', $5,
-                                   'walletAddress', $6))`,
-      [locked.user_id, locked.gram_amount, locked.id, payment.txHash, locked.ton_amount_nano, locked.wallet_address],
+               jsonb_build_object('depositId', $3::text, 'paymentHash', $4::text, 'tonAmountNano', $5::text,
+                                   'walletAddress', $6::text))`,
+      [locked.user_id, locked.gram_amount, locked.id, payment.txHash, String(locked.ton_amount_nano), locked.wallet_address],
     );
     await client.query(
       `UPDATE gram_deposits
@@ -9144,6 +9145,9 @@ ${walletAddress}
       if (!walletAddress) return res.status(400).json({ message: 'Connect your wallet first' });
       if (!/^(?:\d+)(?:\.\d{1,9})?$/.test(gramAmount) || Number(gramAmount) <= 0) {
         return res.status(400).json({ message: 'Enter a valid GRAM amount' });
+      }
+      if (Number(gramAmount) < MIN_GRAM_DEPOSIT) {
+        return res.status(400).json({ message: `Minimum deposit is ${MIN_GRAM_DEPOSIT} GRAM` });
       }
       if (Number(gramAmount) > 10_000_000) {
         return res.status(400).json({ message: 'Amount is too large' });

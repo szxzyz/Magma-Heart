@@ -3332,14 +3332,14 @@ export class DatabaseStorage implements IStorage {
         await client.query(
           `INSERT INTO transactions (user_id, amount, type, source, description, metadata)
            VALUES ($1, $2, 'addition', 'nft_reward', $3,
-                   jsonb_build_object('rewardType', 'AXN', 'machineId', $4, 'machineType', $5, 'earningId', $6))`,
+                   jsonb_build_object('rewardType', 'AXN', 'machineId', $4::text, 'machineType', $5::text, 'earningId', $6::text))`,
           [
             userId,
             claim.amount,
             `${claim.machineName} farming reward claimed`,
-            claim.machineId,
-            claim.machineTypeId,
-            earningResult.rows[0]?.id,
+            String(claim.machineId),
+            String(claim.machineTypeId),
+            earningResult.rows[0]?.id ? String(earningResult.rows[0].id) : null,
           ],
         );
       }
