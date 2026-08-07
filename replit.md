@@ -1,7 +1,7 @@
-# Axionet - CIPHER Earning Platform
+# Axionet - GRAM Earning Platform
 
 ## Overview
-Axionet is a Telegram-based CIPHER earning platform. Users earn CIPHER by watching ads, completing tasks, farming, daily check-ins, mystery box, and referring friends. Users withdraw AXN (wallet balance) through the platform. Two currencies in use: CIPHER (earned via ads/tasks, stored in `balance`) and AXN (wallet balance, stored in `wallet_balance`).
+Axionet is a Telegram-based GRAM earning platform. Users earn GRAM by watching ads, completing tasks, daily check-ins, mystery gifts, and referring friends. AXN remains separate for farming and withdrawals. Deposits use TON at 1 GRAM = 1 TON.
 
 ## User Preferences
 - Task type icons should be small and compact (w-4 h-4 with p-2.5 padding)
@@ -21,23 +21,22 @@ Axionet is a Telegram-based CIPHER earning platform. Users earn CIPHER by watchi
 - **Stack**: React, TypeScript, Vite (frontend); Express.js, Node.js (backend); PostgreSQL with Drizzle ORM (database).
 - **Authentication**: Telegram WebApp Authentication.
 - **No Mining Machine**: The old AXN Mining Machine system (levels 1–25, CPU start, antivirus, health, energy) has been fully removed. Do NOT add it back.
-- **Currency**: Two currencies — CIPHER (earning currency, `balance` field) and AXN (wallet/withdrawal currency, `wallet_balance` field). No BTC, SAT, Satoshi, or Lightning Sats references anywhere in the UI.
+- **Currency**: Two currencies — GRAM (earning currency, `balance` field) and AXN (farming/withdrawal currency, `wallet_balance` field). No legacy CIPHER labels remain in active UI or API contracts.
 - **Branding**: App uses AXN logo (public/axn-logo.svg) — futuristic, no text, no Bitcoin symbol. Loading screen shows only the logo + bouncing dots, no app name text.
 - **Notification UI**: Black background (#0a0a0a), silver/light gray text (#c8c8c8), colored accent border per type.
-- **Referral System**: Users invite friends and receive 1,000 CIPHER when a referred friend cumulatively collects 100 AXN, plus a 5% commission on referred-friend TON deposits after conversion to CIPHER. Both rewards are automatic and idempotent; there is no mining speed boost or manual claim flow.
-- **Withdrawal System**: Direct AXN withdrawals. Minimum 20 AXN, with configurable fee. Balance deducted from `balance` field on admin approval. Admin can approve/reject with automatic balance deduction/refund.
+- **Referral System**: Users invite friends and receive 0.01 GRAM when a referred friend cumulatively collects 100 AXN, plus a 5% commission on referred-friend TON deposits. Both rewards are automatic and idempotent.
+- **Withdrawal System**: Direct AXN withdrawals. Minimum 20 AXN, with configurable fee. AXN is deducted from `wallet_balance` on admin approval. Admin can approve/reject with automatic AXN deduction/refund.
 - **ArcPay Integration**: Full integration for PDZ top-ups, including secure API credential handling, retry logic, and a webhook for payment notifications.
 - **Earning Mechanics**:
-  - **Ads (Earn page)**: Monetag (+10 CIPHER, 50/day), Adgram (+10 CIPHER, 10/day), Gigapub (+10 CIPHER, 30/day)
-  - **Special Task**: Add `$AXN` to Telegram name — one-time +50 CIPHER reward
-  - **Farming (Games page)**: Simple farming at 0.001 CIPHER/s, 4-hour session, claim anytime via `/api/farming/start` and `/api/farming/claim`
-  - **Daily Check-in (Games page)**: +5 CIPHER per day, requires watching a rewarded ad
-  - **Mystery Box (Games page)**: Win 1–100 CIPHER daily, requires watching a rewarded ad
-  - **Promo Codes (Games page)**: Admin issues promo codes, users redeem for bonus CIPHER
+  - **Ads (Earn page)**: Monetag, Adgram, and Gigapub rewards credit GRAM with provider-specific daily limits
+  - **Special Task**: Add `$AXN` to Telegram name — one-time GRAM reward
+  - **Daily Check-in (Games page)**: GRAM reward, requires watching a rewarded ad
+  - **Mystery Gift (Games page)**: Random GRAM reward, requires watching a rewarded ad
+  - **Promo Codes (Games page)**: Admin issues promo codes for GRAM or AXN bonuses
   - **Referral (Friend page)**: Invite friends, receive automatic milestone and deposit rewards
 - **Data Persistence**: Employs a dual storage strategy (IndexedDB primary, localStorage fallback) with a custom `PersistentStorage` class for robust data saving, auto-sync, and fallback handling.
 - **Mandatory Channel & Group Join Security**: Locks app access until users join specified Telegram channel and group, verified in real-time on every app launch.
-- **Ad Watch System**: Three providers — Monetag (50/day), Adgram (10/day), Gigapub (30/day). Each gives +10 CIPHER. Daily limits reset at UTC midnight, tracked via `ad_slot_cooldowns` table and localStorage.
+- **Ad Watch System**: Three providers — Monetag (50/day), Adgram (10/day), Gigapub (30/day). Rewards credit GRAM. Daily limits reset at UTC midnight, tracked via `ad_slot_cooldowns` table and localStorage.
 - **Ad Requirements**: Rewarded interstitial ad required before Daily Check-in and Mystery Box claim.
 - **Native Share Dialog**: Utilizes Telegram's `shareMessage()` API for rich, native sharing experiences, with fallbacks.
 
@@ -91,18 +90,18 @@ Axionet is a Telegram-based CIPHER earning platform. Users earn CIPHER by watchi
 - **Fixed "Insufficient  balance" error during admin approval**: Previously, balance was incorrectly deducted at withdrawal request time AND checked again during approval, causing approval to fail.
 - **Correct withdrawal flow now implemented**:
   1. On withdrawal REQUEST: Only validates balance (checks if sufficient funds exist), does NOT deduct balance
-  2. On admin APPROVAL: Deducts both  and BUG balance from user account
+  2. On admin APPROVAL: Deducts the AXN amount from the user's `wallet_balance`
   3. On admin REJECTION: Balance remains unchanged (since it was never deducted)
-- **Balance integrity**: User balance stays unchanged while withdrawal status is PENDING; balance is only deducted when admin approves
+- **Balance integrity**: The AXN wallet balance stays unchanged while withdrawal status is PENDING; AXN is only deducted when admin approves
 - **Legacy withdrawal support**: Handles withdrawals created before this fix (where balance was already deducted at request time):
   - APPROVAL: Detects legacy withdrawals (insufficient balance) and approves without deducting again
   - REJECTION: Automatically refunds the balance that was deducted at request time
 - **Files modified**: `server/routes.ts` (removed balance deduction from request creation), `server/storage.ts` (approveWithdrawal and rejectWithdrawal now handle both new and legacy flows)
 
 ### August 2026 - Automatic Referral Rewards
-- Replaced the old ad/withdrawal referral reward model with a 1,000 CIPHER reward when a referred friend cumulatively collects 100 AXN.
-- Added a 5% deposit commission based on the referred friend's TON deposit converted at 100,000 CIPHER per TON.
-- Invite & Earn now shows Friends Invited, Commission Earned (CIPHER), reward rules, and the Top 10 active NFT holders leaderboard.
+- Replaced the old ad/withdrawal referral reward model with a 0.01 GRAM reward when a referred friend cumulatively collects 100 AXN.
+- Added a 5% deposit commission based on the referred friend's TON deposit.
+- Invite & Earn now shows Friends Invited, Commission Earned (GRAM), reward rules, and the Top 10 active NFT holders leaderboard.
 
 ### December 2024 - Telegram Bot Notification Fixes
 - **Referral Notification**: Only ONE message sent on FIRST AD with  reward from Admin Settings (uses `firstAdWatched` flag to prevent duplicate notifications)

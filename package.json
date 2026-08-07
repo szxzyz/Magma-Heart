@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:vite --external:node-telegram-bot-api --alias:@shared=./shared",
-    "start": "NODE_TLS_REJECT_UNAUTHORIZED=0 NODE_ENV=production node dist/index.js",
-    "db:push": "NODE_TLS_REJECT_UNAUTHORIZED=0 drizzle-kit push",
+    "start": "NODE_ENV=production node dist/index.js",
+    "db:push": "drizzle-kit push",
     "migrate": "drizzle-kit migrate",
     "fix-referrals": "node fix-referral-data-production.js"
   },
@@ -72,6 +72,7 @@
     "nanoid": "^5.1.5",
     "next-themes": "^0.4.6",
     "node-telegram-bot-api": "^0.66.0",
+    "npm": "^11.19.0",
     "openid-client": "^6.7.1",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
@@ -114,5 +115,10 @@
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
+  },
+  "overrides": {
+    "request": {
+      "form-data": "2.5.5"
+    }
   }
 }
