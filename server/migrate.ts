@@ -111,9 +111,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
     // Postgres reached over a private network) uses a self-signed cert.
     const migrationSslConfig = process.env.DATABASE_URL?.includes('sslmode=disable')
       ? false
-      : process.env.DATABASE_SSL_CA
-        ? { ca: process.env.DATABASE_SSL_CA, rejectUnauthorized: true }
-        : { rejectUnauthorized: false };
+      : { rejectUnauthorized: false };
     const client = new Client({
       connectionString: process.env.DATABASE_URL,
       ssl: migrationSslConfig

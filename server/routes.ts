@@ -9186,9 +9186,10 @@ ${walletAddress}
       );
       if (!owned.rows[0]) return res.status(404).json({ message: 'Deposit request not found' });
       return res.json(await settleGramDeposit(req.params.id));
-    } catch (error) {
+    } catch (error: any) {
       console.error('[GRAM-DEPOSIT] status error:', error);
-      return res.status(500).json({ message: '❌ Payment verification failed. Please wait for blockchain confirmation or contact support if the issue persists.' });
+      const detail = error?.message || String(error);
+      return res.status(500).json({ message: `❌ Payment verification failed: ${detail}` });
     }
   });
 
@@ -9203,9 +9204,10 @@ ${walletAddress}
       );
       if (!owned.rows[0]) return res.status(404).json({ message: 'Purchase request not found' });
       return res.json(await settleGramDeposit(req.params.id));
-    } catch (error) {
+    } catch (error: any) {
       console.error('[GRAM-DEPOSIT] verify error:', error);
-      return res.status(500).json({ message: '❌ Payment verification failed. Please wait for blockchain confirmation or contact support if the issue persists.' });
+      const detail = error?.message || String(error);
+      return res.status(500).json({ message: `❌ Payment verification failed: ${detail}` });
     }
   });
 
