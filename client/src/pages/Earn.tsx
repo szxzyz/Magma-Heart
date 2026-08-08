@@ -145,8 +145,6 @@ function AdProviderRow({
         <div style={{ flex: 1 }}>
           <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 3 }}>REWARD</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#0a0a0a', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            </div>
             <span style={{ color: '#fff', fontSize: 15, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               {reward.toLocaleString(undefined, { maximumFractionDigits: 6 })}
               <TonIcon size={15} />
@@ -223,7 +221,7 @@ function AxnNameTaskDaily({ claimedToday }: { claimedToday: boolean }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           <span style={{ color: TEXT, fontSize: 14, fontWeight: 800 }}>Add $AXN to your name</span>
-          <span style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 5, color: BLUE, fontSize: 10, fontWeight: 800, padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>+0.01 <TonIcon size={12} /></span>
+          <span style={{ color: '#fff', fontSize: 15, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5 }}>+0.01 <TonIcon size={15} /></span>
         </div>
       </div>
       <div style={{ flexShrink: 0 }}>

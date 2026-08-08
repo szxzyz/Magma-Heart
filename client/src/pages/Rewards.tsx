@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { showNotification } from "@/components/AppNotification";
@@ -7,13 +7,13 @@ import MenuPopup from "@/components/MenuPopup";
 import PopupShell from "@/components/PopupShell";
 import Header from "@/components/Header";
 import { showAdgramAd } from "@/lib/showAd";
+import { TonIcon } from "@/components/TonIcon";
 import { MACHINE_TYPES } from "../../../shared/machineTypes";
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-type MysteryPhase = 'idle' | 'intro' | 'opening' | 'revealed' | 'claiming' | 'done';
 
 function fmtCountdown(secs: number): string {
   if (secs <= 0) return "Expired";
@@ -371,10 +371,15 @@ export default function Rewards() {
   const MYSTERY_DAILY_LIMIT = 5;
   const mysteryOpened = mysteryClaimsToday >= MYSTERY_DAILY_LIMIT;
 
-  const [mysteryPhase, setMysteryPhase] = useState<MysteryPhase>('idle');
-  const [mysteryReward, setMysteryReward] = useState(0);
-  const [mysteryAdsWatched, setMysteryAdsWatched] = useState(0);
-  const mysteryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mysteryAdLoading, setMysteryAdLoading] = useState(false);
+  // Legacy popup state is intentionally inert; Mystery Gift now auto-credits
+  // after one successfully completed ad without rendering a popup.
+  const mysteryPhase = 'idle';
+  const mysteryReward = 0;
+  const mysteryAdsWatched = 0;
+  const setMysteryPhase = (_phase: string) => {};
+  const handleMysteryStart = () => {};
+  const handleMysteryClaim = () => {};
 
   const [now, setNow] = useState(() => Date.now());
 
@@ -438,53 +443,27 @@ export default function Rewards() {
   };
 
   const handleMysteryOpen = async () => {
-    if (mysteryOpened || mysteryPhase !== 'idle') return;
-    setMysteryPhase('intro');
-  };
-
-  const handleMysteryStart = async () => {
-    if (mysteryOpened || mysteryPhase !== 'intro') return;
-    setMysteryPhase('opening');
-    setMysteryAdsWatched(0);
-    if (mysteryTimerRef.current) clearTimeout(mysteryTimerRef.current);
-
-    let serverReward = 0;
-    // One opening requires two successfully completed AdsGram 41799 ads.
+    if (mysteryOpened || mysteryAdLoading) return;
+    setMysteryAdLoading(true);
     try {
-      for (let ad = 0; ad < 2; ad++) {
-        await showAdgramAd();
-        setMysteryAdsWatched(ad + 1);
-      }
+      await showAdgramAd();
     } catch {
-      setMysteryPhase('intro');
-      setMysteryAdsWatched(0);
-      showNotification('Both ads must be completed to unlock this Mystery Gift.', 'error');
+      setMysteryAdLoading(false);
+      showNotification('Ad was not completed. No Mystery Gift reward was granted.', 'error');
       return;
     }
     try {
       const res = await apiRequest('POST', '/api/mystery-box', {});
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed');
-      serverReward = data.reward ?? 0;
-      setMysteryReward(serverReward);
       if (typeof data.claimsToday === 'number') setMysteryClaimsToday(data.claimsToday);
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      showNotification('Mystery Gift reward added to your balance.', 'success');
     } catch (err: any) {
-      setMysteryPhase('idle');
       showNotification(err?.message || 'Failed to open mystery box. Try again.', 'error');
-      return;
+    } finally {
+      setMysteryAdLoading(false);
     }
-
-    mysteryTimerRef.current = setTimeout(() => {
-      setMysteryPhase('revealed');
-    }, 2200);
-  };
-
-  const handleMysteryClaim = () => {
-    if (mysteryPhase !== 'revealed') return;
-    showNotification(`Mystery Gift! You won ${mysteryReward} GRAM!`, 'success');
-    setMysteryPhase('done');
-    mysteryTimerRef.current = setTimeout(() => setMysteryPhase('idle'), 1800);
   };
 
   useEffect(() => {
@@ -575,7 +554,9 @@ export default function Rewards() {
             </svg>
             <div style={{ flex: 1 }}>
               <div style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>Daily Check-In</div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>Earn 0.001 GRAM</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                Earn 0.001 <TonIcon size={14} />
+              </div>
             </div>
             <button
               onClick={handleDailyCheck}
@@ -588,7 +569,7 @@ export default function Rewards() {
                 cursor: (dailyChecked || dailyAdLoading) ? 'not-allowed' : 'pointer',
                 flexShrink: 0, letterSpacing: '0.03em',
                 boxShadow: dailyChecked ? 'none' : '0 2px 12px rgba(37,99,235,0.4)',
-                display: 'flex', alignItems: 'center', gap: 5,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
               }}
               className="active:scale-95 transition-transform"
             >
@@ -615,19 +596,19 @@ export default function Rewards() {
             </div>
             <button
               onClick={handleMysteryOpen}
-              disabled={mysteryOpened || mysteryPhase !== 'idle'}
+               disabled={mysteryOpened || mysteryAdLoading}
               style={{
-                background: mysteryOpened ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                 background: mysteryOpened || mysteryAdLoading ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, #2563eb, #3b82f6)',
                 color: mysteryOpened ? 'rgba(255,255,255,0.3)' : '#fff',
                 border: 'none',
                  width: 76, height: 38, boxSizing: 'border-box', borderRadius: 10, padding: 0, fontSize: 12, fontWeight: 800,
-                cursor: mysteryOpened ? 'not-allowed' : 'pointer', flexShrink: 0,
-                boxShadow: mysteryOpened ? 'none' : '0 2px 12px rgba(37,99,235,0.4)',
+                 cursor: mysteryOpened || mysteryAdLoading ? 'not-allowed' : 'pointer', flexShrink: 0,
+                 boxShadow: mysteryOpened || mysteryAdLoading ? 'none' : '0 2px 12px rgba(37,99,235,0.4)',
                  display: 'flex', alignItems: 'center', justifyContent: 'center', letterSpacing: '0.03em',
               }}
               className="active:scale-95 transition-transform"
             >
-              {mysteryOpened ? 'DONE' : 'OPEN'}
+              {mysteryAdLoading ? 'WATCHING…' : mysteryOpened ? 'DONE' : 'OPEN'}
             </button>
           </div>
         </div>
@@ -807,7 +788,7 @@ export default function Rewards() {
       </div>
 
       {/* Mystery Box Popup */}
-       {mysteryPhase !== 'idle' && (
+       {false && mysteryPhase !== 'idle' && (
         <PopupShell onClose={() => mysteryPhase === 'done' && setMysteryPhase('idle')} maxWidth={340} zIndex={950} closeOnBackdrop={mysteryPhase === 'done'}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
