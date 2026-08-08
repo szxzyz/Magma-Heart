@@ -307,6 +307,18 @@ function MigrationGate({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  useEffect(() => {
+    const zone = import.meta.env.VITE_MONETAG_ZONE;
+    if (!zone || document.querySelector('script[data-axn-monetag]')) return;
+    const script = document.createElement('script');
+    script.async = true;
+    script.dataset.axnMonetag = 'true';
+    script.src = 'https://libtl.com/sdk.js';
+    script.dataset.zone = zone;
+    script.dataset.sdk = `show_${zone}`;
+    document.head.appendChild(script);
+  }, []);
+
   const [isBanned, setIsBanned] = useState(false);
   const [banReason, setBanReason] = useState<string>();
   const [banType, setBanType] = useState<string>();
