@@ -6,14 +6,14 @@ import { apiRequest } from "@/lib/queryClient";
 import MenuPopup from "@/components/MenuPopup";
 import PopupShell from "@/components/PopupShell";
 import Header from "@/components/Header";
-import { showRewardedInterstitial } from "@/lib/showAd";
+import { showAdgramAd } from "@/lib/showAd";
 import { MACHINE_TYPES } from "../../../shared/machineTypes";
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-type MysteryPhase = 'idle' | 'opening' | 'revealed' | 'claiming' | 'done';
+type MysteryPhase = 'idle' | 'intro' | 'opening' | 'revealed' | 'claiming' | 'done';
 
 function fmtCountdown(secs: number): string {
   if (secs <= 0) return "Expired";
@@ -373,6 +373,7 @@ export default function Rewards() {
 
   const [mysteryPhase, setMysteryPhase] = useState<MysteryPhase>('idle');
   const [mysteryReward, setMysteryReward] = useState(0);
+  const [mysteryAdsWatched, setMysteryAdsWatched] = useState(0);
   const mysteryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [now, setNow] = useState(() => Date.now());
@@ -427,8 +428,8 @@ export default function Rewards() {
     if (dailyChecked || dailyAdLoading || dailyCheckMutation.isPending) return;
     setDailyAdLoading(true);
     try {
-      await showRewardedInterstitial();
-      dailyCheckMutation.mutate();
+      await showAdgramAd();
+      await dailyCheckMutation.mutateAsync();
     } catch {
       showNotification('Ad was not completed. Daily check-in reward was not granted.', 'error');
     } finally {
@@ -438,13 +439,28 @@ export default function Rewards() {
 
   const handleMysteryOpen = async () => {
     if (mysteryOpened || mysteryPhase !== 'idle') return;
+    setMysteryPhase('intro');
+  };
+
+  const handleMysteryStart = async () => {
+    if (mysteryOpened || mysteryPhase !== 'intro') return;
     setMysteryPhase('opening');
+    setMysteryAdsWatched(0);
     if (mysteryTimerRef.current) clearTimeout(mysteryTimerRef.current);
 
     let serverReward = 0;
-    // Unlock requires watching 2 ads
-    try { await showRewardedInterstitial(); } catch {}
-    try { await showRewardedInterstitial(); } catch {}
+    // One opening requires two successfully completed AdsGram 41799 ads.
+    try {
+      for (let ad = 0; ad < 2; ad++) {
+        await showAdgramAd();
+        setMysteryAdsWatched(ad + 1);
+      }
+    } catch {
+      setMysteryPhase('intro');
+      setMysteryAdsWatched(0);
+      showNotification('Both ads must be completed to unlock this Mystery Gift.', 'error');
+      return;
+    }
     try {
       const res = await apiRequest('POST', '/api/mystery-box', {});
       const data = await res.json();
@@ -568,7 +584,7 @@ export default function Rewards() {
                 background: dailyChecked ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, #2563eb, #3b82f6)',
                 color: dailyChecked ? 'rgba(255,255,255,0.3)' : '#fff',
                 border: 'none',
-                borderRadius: 10, padding: '9px 16px', fontSize: 12, fontWeight: 800,
+                 width: 76, height: 38, boxSizing: 'border-box', borderRadius: 10, padding: 0, fontSize: 12, fontWeight: 800,
                 cursor: (dailyChecked || dailyAdLoading) ? 'not-allowed' : 'pointer',
                 flexShrink: 0, letterSpacing: '0.03em',
                 boxShadow: dailyChecked ? 'none' : '0 2px 12px rgba(37,99,235,0.4)',
@@ -593,9 +609,9 @@ export default function Rewards() {
             </svg>
             <div style={{ flex: 1 }}>
               <div style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>Mystery Gift</div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>
-                Win 0.00001–0.01 GRAM · Watch 2 ads · {Math.max(0, MYSTERY_DAILY_LIMIT - mysteryClaimsToday)}/{MYSTERY_DAILY_LIMIT} left today
-              </div>
+             <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>
+                 Open a Mystery Gift
+               </div>
             </div>
             <button
               onClick={handleMysteryOpen}
@@ -604,9 +620,10 @@ export default function Rewards() {
                 background: mysteryOpened ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, #2563eb, #3b82f6)',
                 color: mysteryOpened ? 'rgba(255,255,255,0.3)' : '#fff',
                 border: 'none',
-                borderRadius: 10, padding: '9px 16px', fontSize: 12, fontWeight: 800,
+                 width: 76, height: 38, boxSizing: 'border-box', borderRadius: 10, padding: 0, fontSize: 12, fontWeight: 800,
                 cursor: mysteryOpened ? 'not-allowed' : 'pointer', flexShrink: 0,
                 boxShadow: mysteryOpened ? 'none' : '0 2px 12px rgba(37,99,235,0.4)',
+                 display: 'flex', alignItems: 'center', justifyContent: 'center', letterSpacing: '0.03em',
               }}
               className="active:scale-95 transition-transform"
             >
@@ -790,10 +807,19 @@ export default function Rewards() {
       </div>
 
       {/* Mystery Box Popup */}
-      {mysteryPhase !== 'idle' && (
+       {mysteryPhase !== 'idle' && (
         <PopupShell onClose={() => mysteryPhase === 'done' && setMysteryPhase('idle')} maxWidth={340} zIndex={950} closeOnBackdrop={mysteryPhase === 'done'}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+              {mysteryPhase === 'intro' && (
+                <div style={{ width: 82, height: 82, borderRadius: '50%', background: 'linear-gradient(135deg, #1d4ed8, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                  </svg>
+                </div>
+              )}
               {mysteryPhase === 'opening' && (
                 <div style={{
                   width: 82, height: 82, borderRadius: '50%',
@@ -825,19 +851,30 @@ export default function Rewards() {
             </div>
 
             <div style={{ color: '#fff', fontSize: 18, fontWeight: 900, marginBottom: 6 }}>
-              {mysteryPhase === 'opening' ? 'Opening box...'
+              {mysteryPhase === 'intro' ? 'Unlock 1 Mystery Gift'
+                : mysteryPhase === 'opening' ? 'Watching ads...'
                 : mysteryPhase === 'revealed' ? `You won ${mysteryReward} GRAM!`
                 : mysteryPhase === 'claiming' ? 'Claiming...'
                 : 'Reward Claimed!'}
             </div>
             <div style={{ color: 'rgba(255,255,255,0.32)', fontSize: 13, marginBottom: 28 }}>
-              {mysteryPhase === 'opening' ? 'Wait for your prize...'
+              {mysteryPhase === 'intro' ? 'Watch 2 ads to unlock 1 Mystery Gift opening.'
+                : mysteryPhase === 'opening' ? `Completed ${mysteryAdsWatched} of 2 ads...`
                 : mysteryPhase === 'revealed' ? 'Tap below to claim your GRAM'
                 : mysteryPhase === 'claiming' ? 'Please wait...'
                 : 'GRAM added to your balance'}
             </div>
 
-            {mysteryPhase === 'revealed' && (
+             {mysteryPhase === 'intro' && (
+               <button onClick={handleMysteryStart} style={{
+                 width: '100%', padding: '14px', background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                 border: 'none', borderRadius: 50, color: '#fff', fontSize: 14, fontWeight: 800,
+                 cursor: 'pointer', boxShadow: '0 4px 20px rgba(37,99,235,0.4)',
+               }} className="active:scale-95 transition-transform">
+                 Watch 2 Ads
+               </button>
+             )}
+             {mysteryPhase === 'revealed' && (
               <button onClick={handleMysteryClaim} style={{
                 width: '100%', padding: '14px',
                 background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
@@ -845,7 +882,7 @@ export default function Rewards() {
                 fontSize: 14, fontWeight: 800, cursor: 'pointer',
                 boxShadow: '0 4px 20px rgba(37,99,235,0.4)',
               }} className="active:scale-95 transition-transform">
-                Claim {mysteryReward} GRAM
+                 Open Reward
               </button>
             )}
             {(mysteryPhase === 'opening' || mysteryPhase === 'claiming') && (

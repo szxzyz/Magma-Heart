@@ -81,6 +81,14 @@ export default function Games() {
     if (!source) return 'Balance Update';
     return SOURCE_LABELS[source] || source.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   };
+  const getAdProviderLabel = (entry: { source?: string; description?: string; metadata?: any }) => {
+    if (entry.source !== 'ad_slot_watch') return null;
+    const text = `${entry.description || ''} ${entry.metadata?.provider || ''}`.toLowerCase();
+    if (text.includes('adsgram')) return 'AdsGram ad';
+    if (text.includes('monetag')) return 'Monetag ad';
+    if (text.includes('gigapub')) return 'Gigapub ad';
+    return 'Ad watch';
+  };
 
   const transactionHistory = [
     ...(transactionData?.transactions || []).map((transaction: any) => ({
@@ -96,6 +104,7 @@ export default function Games() {
       kind: 'transaction' as const,
       source: transaction.source,
       sourceLabel: getSourceLabel(transaction.source),
+      adProviderLabel: getAdProviderLabel(transaction),
       rewardType: transaction.metadata?.rewardType,
     })),
     ...(transactionData?.withdrawals || []).map((withdrawal: any) => ({
@@ -106,7 +115,8 @@ export default function Games() {
       createdAt: withdrawal.createdAt,
       kind: 'withdrawal' as const,
       source: 'withdrawal',
-      sourceLabel: 'Withdrawal',
+       sourceLabel: 'Withdrawal',
+       adProviderLabel: null,
       rewardType: undefined,
     })),
   ].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -386,7 +396,7 @@ export default function Games() {
                       : <GRAMIcon size={26} />
                   }
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: '#fff', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</div>
+                    <div style={{ color: '#fff', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.adProviderLabel || entry.label}</div>
                     <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 3 }}>
                       {entry.createdAt ? new Date(entry.createdAt).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                       {showSourceLine ? ` · ${entry.sourceLabel}` : ''}

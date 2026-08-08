@@ -7,6 +7,7 @@ import MenuPopup from "@/components/MenuPopup";
 import { showNotification } from "@/components/AppNotification";
 import { apiRequest } from "@/lib/queryClient";
 import { showMonatagRewardedAd, showAdgramAd, showGigapubAd } from "@/lib/showAd";
+import { TonIcon } from "@/components/TonIcon";
 
 const BLUE = '#3b82f6';
 const BLUE_D = '#2563eb';
@@ -146,9 +147,9 @@ function AdProviderRow({
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#0a0a0a', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             </div>
-            <span style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>
+            <span style={{ color: '#fff', fontSize: 15, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               {reward.toLocaleString(undefined, { maximumFractionDigits: 6 })}
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 600, marginLeft: 3 }}>GRAM</span>
+              <TonIcon size={15} />
             </span>
           </div>
         </div>
@@ -222,7 +223,7 @@ function AxnNameTaskDaily({ claimedToday }: { claimedToday: boolean }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
           <span style={{ color: TEXT, fontSize: 14, fontWeight: 800 }}>Add $AXN to your name</span>
-          <span style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 5, color: BLUE, fontSize: 10, fontWeight: 800, padding: '2px 6px' }}>+0.01 GRAM</span>
+          <span style={{ background: 'rgba(37,99,235,0.12)', borderRadius: 5, color: BLUE, fontSize: 10, fontWeight: 800, padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>+0.01 <TonIcon size={12} /></span>
         </div>
       </div>
       <div style={{ flexShrink: 0 }}>
@@ -297,7 +298,7 @@ function PartnerTaskRow({ task }: { task: any }) {
       </div>
       <div style={{ flexShrink: 0 }}>
         {!clicked ? (
-          <span style={{ background: 'rgba(37,99,235,0.15)', borderRadius: 8, color: BLUE, fontSize: 11, fontWeight: 800, padding: '5px 9px', display: 'inline-block' }}>+{task.gramReward} GRAM</span>
+          <span style={{ background: 'rgba(37,99,235,0.15)', borderRadius: 8, color: BLUE, fontSize: 11, fontWeight: 800, padding: '5px 9px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>+{task.gramReward} <TonIcon size={13} /></span>
         ) : (
           <button onClick={handleClaim} disabled={claiming} style={{ background: claiming ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, #16a34a, #22c55e)', border: 'none', borderRadius: 10, padding: '9px 12px', fontSize: 12, fontWeight: 800, color: claiming ? TEXT_DIM : '#fff', cursor: claiming ? 'not-allowed' : 'pointer', boxShadow: claiming ? 'none' : '0 2px 12px rgba(34,197,94,0.35)' }} className="active:scale-95 transition-transform">
             {claiming ? '…' : 'CLAIM'}
@@ -369,7 +370,7 @@ function UserTaskRow({ task }: { task: any }) {
       </div>
       <div style={{ flexShrink: 0 }}>
         {!clicked ? (
-          <span style={{ background: 'rgba(168,85,247,0.15)', borderRadius: 8, color: '#a855f7', fontSize: 11, fontWeight: 800, padding: '5px 9px', display: 'inline-block' }}>+{task.reward_per_completion} GRAM</span>
+          <span style={{ background: 'rgba(168,85,247,0.15)', borderRadius: 8, color: '#a855f7', fontSize: 11, fontWeight: 800, padding: '5px 9px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>+{task.reward_per_completion} <TonIcon size={13} /></span>
         ) : (
           <button onClick={handleClaim} disabled={claiming} style={{ background: claiming ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, #16a34a, #22c55e)', border: 'none', borderRadius: 10, padding: '9px 12px', fontSize: 12, fontWeight: 800, color: claiming ? TEXT_DIM : '#fff', cursor: claiming ? 'not-allowed' : 'pointer', boxShadow: claiming ? 'none' : '0 2px 12px rgba(34,197,94,0.35)' }} className="active:scale-95 transition-transform">
             {claiming ? '…' : 'CLAIM'}
@@ -615,8 +616,8 @@ function SectionLabel({ title, subtitle }: { title: string; subtitle?: string })
   const remainingWords = firstSpace === -1 ? '' : title.slice(firstSpace + 1);
 
   return (
-    <div style={{ marginBottom: 8 }}>
-      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+    <div style={{ marginBottom: 10 }}>
+      <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.3px', lineHeight: 1.2 }}>
         <span style={{ color: BLUE }}>{firstWord}</span>
         {remainingWords && <span style={{ color: TEXT }}>{` ${remainingWords}`}</span>}
       </span>
