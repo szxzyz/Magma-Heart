@@ -120,6 +120,11 @@ function AdProviderRow({
           <img
             src={PROVIDER_LOGOS[provider]}
             alt={provider}
+            width={48}
+            height={48}
+            loading="lazy"
+            decoding="async"
+            fetchPriority="low"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: done ? 'grayscale(0.8)' : 'none' }}
           />
         </div>

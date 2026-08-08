@@ -17,6 +17,15 @@ function fmtGram(axn: number): string {
   return (axn / 100_000).toFixed(3);
 }
 
+function TonIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 56 56" fill="none" aria-label="TON" style={{ flexShrink: 0, display: "inline-block", verticalAlign: "middle" }}>
+      <path d="M28 0C12.536 0 0 12.536 0 28s12.536 28 28 28 28-12.536 28-28S43.464 0 28 0z" fill="#0098EA"/>
+      <path d="M37.115 15.5H18.885c-3.4 0-5.5 3.7-3.7 6.6l10.3 17.8c.8 1.4 2.8 1.4 3.6 0l10.3-17.8c1.7-2.9-.3-6.6-3.7-6.6zm-10.5 16.5l-6.4-11.1h6.4v11.1zm2.8 0V20.9h6.4l-6.4 11.1z" fill="white"/>
+    </svg>
+  );
+}
+
 // ─── Machine Shop Card (NFT-marketplace style) ────────────────────────
 function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; level: number; onBuy: (m: MachineType) => void }) {
   const isMaxLevel = level >= 10;
@@ -77,7 +86,7 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
             AXN Reward
           </div>
           <div style={{ color: "#fff", fontSize: 13, fontWeight: 900, lineHeight: 1.2, fontVariantNumeric: "tabular-nums" }}>
-            {fmtNum(machine.totalRoiAxn)} <span style={{ color: "rgba(255,255,255,0.72)", fontSize: 9, fontWeight: 700 }}>({fmtGram(machine.totalRoiAxn)} GRAM)</span>
+            {fmtNum(machine.totalRoiAxn)} <span style={{ color: "rgba(255,255,255,0.72)", fontSize: 9, fontWeight: 700 }}>AXN</span>
           </div>
         </div>
       </button>
@@ -107,7 +116,12 @@ function MachineShopCard({ machine, level, onBuy }: { machine: MachineType; leve
         }}
         className="active:scale-95 transition-transform"
       >
-        {isMaxLevel ? "MAX LEVEL" : "BUY"}
+         {isMaxLevel ? "MAX LEVEL" : (
+           <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+             {machine.priceGram.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+             <TonIcon />
+           </span>
+         )}
       </button>
     </div>
   );
@@ -135,7 +149,7 @@ function ConfirmPopup({ machine, gramBalance, onConfirm, onCancel, loading }: {
         }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 14, textAlign: "center" }}>{machine.name}</div>
           {[
-            { label: "Price",     value: `${machine.priceGram} GRAM` },
+            { label: "Price",     value: machine.priceGram },
             { label: "Duration",  value: `${machine.durationDays} days` },
             { label: "Hourly",    value: `${fmtNum(machine.hourlyAxn)} AXN/hr` },
             { label: "Daily",     value: `${fmtNum(machine.dailyAxn)} AXN/day` },
@@ -147,7 +161,14 @@ function ConfirmPopup({ machine, gramBalance, onConfirm, onCancel, loading }: {
               borderBottom: "1px solid rgba(255,255,255,0.05)",
             }}>
               <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>{row.label}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{row.value}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>
+                {row.label === "Price" ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    {Number(row.value).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                    <TonIcon size={15} />
+                  </span>
+                ) : row.value}
+              </span>
             </div>
           ))}
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
@@ -182,7 +203,12 @@ function ConfirmPopup({ machine, gramBalance, onConfirm, onCancel, loading }: {
               boxShadow: canAfford ? "0 2px 16px rgba(37,99,235,0.4)" : "none",
             }}
           >
-            {loading ? "Buying…" : "Confirm Purchase"}
+            {loading ? "Buying…" : (
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                Confirm Purchase · {machine.priceGram.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                <TonIcon size={15} />
+              </span>
+            )}
           </button>
           <button
             onClick={onCancel}

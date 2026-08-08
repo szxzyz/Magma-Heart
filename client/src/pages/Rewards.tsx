@@ -627,7 +627,7 @@ export default function Rewards() {
             </div>
           </div>
           <div style={{ color: '#fff', fontSize: 12, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap', textAlign: 'right' }}>
-            ({fmtGram(totalHourlyRate)} GRAM) • {fmtNum(totalHourlyRate)} AXN/hr
+             {fmtNum(totalHourlyRate)} AXN/hr
           </div>
         </div>
 

@@ -10,6 +10,7 @@ import { useAdmin } from "@/hooks/useAdmin";
 import { getGramPrice, axnToGram, gramToUsd, formatGram, formatUsd } from "@/lib/tonPriceService";
 import { ArrowUpRight, History, Loader2, Receipt } from "lucide-react";
 import { AXNIcon } from "@/components/AXNIcon";
+import { GRAMIcon } from "@/components/GRAMIcon";
 import PopupShell from "@/components/PopupShell";
 const AXN_PER_GRAM = 100000;
 
@@ -118,14 +119,17 @@ export default function Games() {
     'task_share', 'task_channel', 'task_community', 'task_claim', 'task_completion', 'daily_task_completion',
     'bonus_claim',
     'referral', 'referral_milestone', 'referral_deposit_commission', 'referral_backfill', 'invite_friend',
-    'gram_deposit',
   ]);
+  type TransactionCategory = 'gram_earn' | 'gram_deposit' | 'axn_earn' | 'axn_withdraw';
+  const getEntryCategory = (entry: { kind: 'transaction' | 'withdrawal'; source?: string; rewardType?: string }): TransactionCategory => {
+    if (entry.kind === 'withdrawal') return 'axn_withdraw';
+    if (entry.source === 'gram_deposit') return 'gram_deposit';
+    if (entry.source === 'nft_reward') return 'axn_earn';
+    return 'gram_earn';
+  };
   const getEntryCurrency = (entry: { kind: 'transaction' | 'withdrawal'; source?: string; rewardType?: string }) => {
-    if (entry.kind === 'withdrawal') return 'AXN';
-    if (entry.rewardType === 'GRAM') return 'GRAM';
-    if (entry.rewardType === 'AXN') return 'AXN';
-    if (entry.source && GRAM_SOURCES.has(entry.source)) return 'GRAM';
-    return 'AXN';
+    const category = getEntryCategory(entry);
+    return category === 'gram_earn' || category === 'gram_deposit' ? 'GRAM' : 'AXN';
   };
 
   // Assets page tabs — filter the transaction history by type.
@@ -141,13 +145,10 @@ export default function Games() {
 
   const filteredTransactionHistory = transactionHistory.filter((entry) => {
     if (activeTab === 'all') return true;
-    if (activeTab === 'withdraw') return entry.kind === 'withdrawal';
-    if (activeTab === 'deposit') return entry.source === 'gram_deposit';
-    // AXN tab covers every AXN-denominated activity — claims, farming/NFT
-    // rewards, AXN-side referral rewards, AND AXN withdrawals (and AXN
-    // deposits, if any exist) — not just credit-type transactions.
-    if (activeTab === 'axn') return getEntryCurrency(entry) === 'AXN';
-    if (activeTab === 'gram') return entry.kind === 'transaction' && getEntryCurrency(entry) === 'GRAM';
+    if (activeTab === 'withdraw') return getEntryCategory(entry) === 'axn_withdraw';
+    if (activeTab === 'deposit') return getEntryCategory(entry) === 'gram_deposit';
+    if (activeTab === 'axn') return getEntryCategory(entry) === 'axn_earn';
+    if (activeTab === 'gram') return getEntryCategory(entry) === 'gram_earn';
     return true;
   });
 
@@ -366,6 +367,7 @@ export default function Games() {
           ) : (
             filteredTransactionHistory.map((entry, index) => {
               const isWithdrawal = entry.kind === 'withdrawal';
+              const category = getEntryCategory(entry);
               const normalizedStatus = normalizeStatus(entry.status);
               const statusColor = normalizedStatus === 'Failed' ? '#f87171' : normalizedStatus === 'Pending' ? '#fbbf24' : '#4ade80';
               const entryGram = showGramValue ? formatGram(axnToGram(Number(entry.amount || 0))) : null;
@@ -374,9 +376,14 @@ export default function Games() {
               const showSourceLine = activeTab === 'axn' && entry.sourceLabel && entry.sourceLabel !== entry.label;
               return (
                 <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 16px', borderTop: index === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)' }}>
-                  {isWithdrawal
-                    ? <ArrowUpRight size={24} color="rgba(255,255,255,0.7)" strokeWidth={1.8} style={{ flexShrink: 0 }} />
-                    : <AXNIcon size={24} />
+                  {category === 'axn_withdraw'
+                    ? <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+                        <AXNIcon size={26} />
+                        <ArrowUpRight size={11} color="#fff" strokeWidth={2.4} style={{ position: 'absolute', right: -3, bottom: -3, background: '#0a0a0a', borderRadius: '50%' }} />
+                      </span>
+                    : category === 'axn_earn'
+                      ? <AXNIcon size={26} />
+                      : <GRAMIcon size={26} />
                   }
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ color: '#fff', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</div>
