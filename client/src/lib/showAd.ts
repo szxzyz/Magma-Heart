@@ -12,8 +12,9 @@ declare global {
 }
 
 window.__axnGamePlaying = false;
+let monetagInFlight: Promise<void> | null = null;
 
-async function waitForSdk(ms = 8000): Promise<boolean> {
+async function waitForSdk(ms = 15000): Promise<boolean> {
   let waited = 0;
   while (typeof window.show_10963365 !== "function" && waited < ms) {
     await new Promise(r => setTimeout(r, 200));
@@ -74,11 +75,20 @@ export async function showAd(): Promise<void> {
 }
 
 export async function showMonatagRewardedAd(): Promise<void> {
-  const ready = await waitForSdk();
-  if (!ready) {
-    throw new Error("Monetag SDK not available");
+  if (monetagInFlight) return monetagInFlight;
+  monetagInFlight = (async () => {
+    const ready = await waitForSdk();
+    if (!ready) throw new Error("Monetag ad is still loading. Please try again.");
+    // Monetag resolves this promise when the rewarded ad flow finishes.
+    // Do not award before the SDK settles, and do not retry automatically:
+    // retrying can show two ads for one user click.
+    await (window.show_10963365 as any)();
+  })();
+  try {
+    await monetagInFlight;
+  } finally {
+    monetagInFlight = null;
   }
-  await (window.show_10963365 as any)();
 }
 
 export async function showAdgramAd(): Promise<void> {
