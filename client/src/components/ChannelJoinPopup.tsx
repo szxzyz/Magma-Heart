@@ -9,8 +9,8 @@ interface ChannelJoinPopupProps {
 }
 
 const CHANNELS = [
-  { url: "https://t.me/LightningSatoshi" },
-  { url: "https://t.me/Axionetchat" },
+  { url: import.meta.env.VITE_CHANNEL2_LINK || "" },
+  { url: import.meta.env.VITE_GROUP_LINK || "" },
 ];
 
 export default function ChannelJoinPopup({ telegramId, onVerified }: ChannelJoinPopupProps) {

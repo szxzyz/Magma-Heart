@@ -19,13 +19,12 @@ export default function BanScreen({ reason, banType, adminBanReason }: BanScreen
     const tg = window.Telegram?.WebApp;
     if (tg?.initData && tg?.initDataUnsafe?.user?.id) {
       const userId = tg.initDataUnsafe.user.id.toString();
-      const adminId = import.meta.env.VITE_TELEGRAM_ADMIN_ID;
       setIsAdmin(userId === adminId);
     }
   }, []);
 
   const handleContactSupport = () => {
-    window.open('https://t.me/szxzyz', '_blank');
+    window.open(import.meta.env.VITE_SUPPORT_LINK || '', '_blank');
   };
 
   const handleSelfUnban = async () => {
