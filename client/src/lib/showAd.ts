@@ -92,7 +92,7 @@ export async function showMonatagRewardedAd(): Promise<void> {
 }
 
 export async function showAdgramAd(): Promise<void> {
-  const ADSGRAM_BLOCK_ID = "41799";
+  const ADSGRAM_BLOCK_ID = import.meta.env.VITE_ADSGRAM_REWARDED_BLOCK_ID;
   await showAdsgramBlock(ADSGRAM_BLOCK_ID, true);
 }
 
@@ -114,7 +114,7 @@ async function showAdsgramBlock(blockId: string, requireCompletion: boolean): Pr
 
 /** Non-rewarded first-open interstitial. It never participates in earning logic. */
 export async function showAdsgramFirstOpenAd(): Promise<void> {
-  await showAdsgramBlock("int-41659", false);
+  await showAdsgramBlock(import.meta.env.VITE_ADSGRAM_FIRST_OPEN_BLOCK_ID, false);
 }
 
 export async function showGigapubAd(): Promise<void> {
