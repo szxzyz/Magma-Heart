@@ -532,13 +532,17 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     // Log transaction for security and tracking
+    const providerMatch = earning.description?.match(/^(AdsGram|Monetag|Gigapub) ad reward$/i);
     await this.logTransaction({
       userId: earning.userId,
       amount: earning.amount,
       type: 'addition',
       source: earning.source,
       description: earning.description || `${earning.source} earning`,
-      metadata: { earningId: newEarning.id }
+      metadata: {
+        earningId: newEarning.id,
+        ...(providerMatch ? { provider: providerMatch[1] } : {}),
+      }
     });
     
     // Update canonical user_balances table and keep users table in sync

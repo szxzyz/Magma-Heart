@@ -745,6 +745,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         2: { reward: 0.007, dailyLimit: 10 },
         3: { reward: 0.005, dailyLimit: 10 },
       };
+      const AD_PROVIDER_BY_SLOT: Record<number, string> = {
+        1: "Monetag",
+        2: "AdsGram",
+        3: "Gigapub",
+      };
       const config = AD_SLOT_CONFIG[slot];
       if (!config) return res.status(400).json({ message: "Invalid ad slot" });
 
@@ -795,7 +800,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: user.id,
         amount: rewardAmount,
         source: "ad_slot_watch",
-        description: `Ad slot ${slot} reward`,
+        description: `${AD_PROVIDER_BY_SLOT[slot]} ad reward`,
       });
 
       const newCount = currentCount + 1;
@@ -949,7 +954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/mystery-box — claim random GRAM (0.00001–0.01), up to 5 times per day
+  // POST /api/mystery-box — server-selected weighted reward, up to 5 times per day.
   app.post('/api/mystery-box', authenticateTelegram, async (req: any, res) => {
     try {
       const user = req.user.user;
@@ -957,7 +962,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const todayKey = new Date().toISOString().slice(0, 10);
       const DAILY_LIMIT = 5;
 
-      const reward = (Math.floor(Math.random() * 1000) + 1) / 100_000;
+      // Keep the distribution server-side: small rewards are common, while the
+      // top reward is intentionally extremely rare. The client cannot influence
+      // the selected tier or amount.
+      const rewardTiers = [
+        { max: 0.70, amount: 0.00001 },
+        { max: 0.90, amount: 0.00005 },
+        { max: 0.97, amount: 0.00010 },
+        { max: 0.99, amount: 0.00050 },
+        { max: 0.999, amount: 0.00100 },
+        { max: 1.00, amount: 0.00500 },
+      ];
+      const roll = Math.random();
+      const reward = rewardTiers.find(tier => roll < tier.max)!.amount;
 
       // Single atomic conditional UPDATE: enforces the daily limit and increments
       // the counter in one statement, so concurrent requests cannot exceed 5/day.

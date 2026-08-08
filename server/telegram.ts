@@ -750,10 +750,13 @@ export async function sendSharePhotoToChat(
 export async function formatWelcomeMessage(): Promise<{ message: string; inlineKeyboard: any }> {
   const botUsername = await getBotUsername();
 
-  const message = `🚀 <b>Welcome To Axionet Airdrop!</b>\n\n` +
-                 `Start your journey with Axionet and earn <b>$AXN</b> rewards on the <b>$TON</b> Blockchain!\n\n` +
-                 `We are allocating <b>50%</b> of the total <b>500M supply</b> directly to the community! 🎁\n\n` +
-                 `<i>TIP: Invite your friends to get more rewards.</i>`;
+  const message = `🚀 <b>Welcome to Axionet</b>!\n\n` +
+                 `Start your journey with Axionet and earn <b>$GRAM rewards</b> across the <b>$AXN ecosystem!</b>\n\n` +
+                 `<tg-emoji emoji-id="5321344937919260235">🛒</tg-emoji> Buy  ` +
+                 `<tg-emoji emoji-id="5197371802136892976">⛏️</tg-emoji> Farm  ` +
+                 `<tg-emoji emoji-id="5224556694557710080">💵</tg-emoji> Earn  ` +
+                 `<tg-emoji emoji-id="5382164415019768638">📈</tg-emoji> Grow\n\n` +
+                 `<i>TIP: Invite friends and unlock extra rewards!</i>`;
 
   const inlineKeyboard = {
     inline_keyboard: [
