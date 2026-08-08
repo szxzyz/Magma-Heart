@@ -27,7 +27,12 @@ services:
         generateValue: true
       # Add these manually in Render dashboard:
       # - TELEGRAM_BOT_TOKEN
-      # - TELEGRAM_ADMIN_ID
+      # - CHANNEL_ID
+      # - CHANNEL_LINK
+      # - GROUP_ID
+      # - GROUP_LINK
+      # - ADMIN_ID
+      # - SUPER_ADMIN_ID
       # - BOT_USERNAME
       # - ARCPAY_API_KEY (optional)
       # - ARCPAY_PRIVATE_KEY (optional)
