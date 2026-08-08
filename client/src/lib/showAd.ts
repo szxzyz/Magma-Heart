@@ -82,7 +82,11 @@ export async function showMonatagRewardedAd(): Promise<void> {
 }
 
 export async function showAdgramAd(): Promise<void> {
-  const ADSGRAM_BLOCK_ID = "33715";
+  const ADSGRAM_BLOCK_ID = "41799";
+  await showAdsgramBlock(ADSGRAM_BLOCK_ID, true);
+}
+
+async function showAdsgramBlock(blockId: string, requireCompletion: boolean): Promise<void> {
   let waited = 0;
   while (typeof window.Adsgram === "undefined" && waited < 8000) {
     await new Promise(r => setTimeout(r, 200));
@@ -91,11 +95,16 @@ export async function showAdgramAd(): Promise<void> {
   if (typeof window.Adsgram === "undefined") {
     throw new Error("Adsgram SDK not available");
   }
-  const controller = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+  const controller = window.Adsgram.init({ blockId });
   const result = await controller.show();
-  if (!result?.done) {
+  if (requireCompletion && !result?.done) {
     throw new Error("Adgram ad was not completed");
   }
+}
+
+/** Non-rewarded first-open interstitial. It never participates in earning logic. */
+export async function showAdsgramFirstOpenAd(): Promise<void> {
+  await showAdsgramBlock("int-41659", false);
 }
 
 export async function showGigapubAd(): Promise<void> {
