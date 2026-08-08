@@ -3,7 +3,9 @@ interface AXNIconProps {
   className?: string;
 }
 
-export function AXNIcon({ size = 20, className = "" }: AXNIconProps) {
+// Daily Rewards icons use a 26px visual reference. Keep the currency mark at
+// the same default size so it remains balanced across pages.
+export function AXNIcon({ size = 26, className = "" }: AXNIconProps) {
   return (
     <span
       className={`flex-shrink-0 inline-block ${className}`}

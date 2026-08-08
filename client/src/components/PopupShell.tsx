@@ -35,7 +35,7 @@ export default function PopupShell({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 18,
+         padding: "max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))",
       }}
     >
       <div
@@ -44,22 +44,24 @@ export default function PopupShell({
           position: "absolute",
           inset: 0,
           background: "rgba(0,0,0,0.58)",
-          backdropFilter: "blur(7px)",
-          WebkitBackdropFilter: "blur(7px)",
+           // Avoid backdrop-filter here: it forces an expensive full-screen
+           // repaint on lower-end Telegram WebViews.
         }}
       />
       <div style={{ ...outerBorderStyle(maxWidth), position: "relative", zIndex: 1 }}>
         <motion.div
-          initial={{ scale: 0.88, opacity: 0, y: 20 }}
+           initial={{ scale: 0.97, opacity: 0, y: 8 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.88, opacity: 0, y: 20 }}
-          transition={{ type: "spring", damping: 26, stiffness: 320 }}
+           exit={{ scale: 0.97, opacity: 0, y: 8 }}
+           transition={{ duration: 0.14, ease: "easeOut" }}
           onClick={event => event.stopPropagation()}
           style={{
             position: "relative",
             width: "100%",
-            maxHeight: "88vh",
+             maxHeight: "min(88dvh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px))",
             overflowY: "auto",
+             overscrollBehavior: "contain",
+             WebkitOverflowScrolling: "touch",
             background: "#0a0a0a",
             clipPath: CUT_LG,
             padding: "22px 18px max(20px, calc(env(safe-area-inset-bottom, 0px) + 12px))",
