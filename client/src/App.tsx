@@ -13,6 +13,7 @@ import SeasonEndOverlay from "@/components/SeasonEndOverlay";
 import { SeasonEndContext } from "@/lib/SeasonEndContext";
 import { useAdmin } from "@/hooks/useAdmin";
 import ChannelJoinPopup from "@/components/ChannelJoinPopup";
+import { showAdsgramFirstOpenAd } from "@/lib/showAd";
 
 export const AppReadyContext = createContext<() => void>(() => {});
 
@@ -176,6 +177,20 @@ function AppContent() {
   const [seasonLockActive, setSeasonLockActive] = useState(false);
   const { isAdmin } = useAdmin();
   const isDevMode = import.meta.env.DEV || import.meta.env.MODE === 'development';
+
+  // Run the acquisition interstitial after the app is mounted. This is
+  // deliberately independent from the rewarded Earn-page flow.
+  useEffect(() => {
+    const firstOpenKey = "axn_adsgram_first_open_seen";
+    if (localStorage.getItem(firstOpenKey)) return;
+    localStorage.setItem(firstOpenKey, "true");
+    const timer = window.setTimeout(() => {
+      showAdsgramFirstOpenAd().catch((error) => {
+        console.warn("First-open AdsGram ad unavailable:", error);
+      });
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // ── Global long-press / context-menu protection ──
   useEffect(() => {
