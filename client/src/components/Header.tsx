@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { forwardRef, useImperativeHandle } from "react";
 import { Plus } from "lucide-react";
+import { TonIcon } from "@/components/TonIcon";
 import DepositPopup from "@/components/DepositPopup";
 
 interface HeaderProps {
@@ -144,14 +145,14 @@ const Header = forwardRef<HTMLDivElement, HeaderProps>(
             </div>
           </div>
 
-          {/* Right — GRAM balance */}
+          {/* Right — TON payment balance indicator */}
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 7px 6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
             <span style={{ color: '#fff', fontSize: 15, fontWeight: 900, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
               {gramBalance.toLocaleString(undefined, { maximumFractionDigits: 6 })}
             </span>
-            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: 800 }}>GRAM</span>
+            <TonIcon size={18} />
             <button
-              aria-label="Buy GRAM"
+              aria-label="Buy with TON"
               onClick={() => setDepositOpen(true)}
               className="active:scale-90 transition-transform"
               style={{
