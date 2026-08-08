@@ -26,6 +26,7 @@ import {
 } from "../shared/schema";
 import { getMachineType } from "../shared/machineTypes";
 import { db } from "./db";
+import { isProtectedTelegramId } from "./config";
 import { eq, desc, and, gte, lt, sql } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -241,6 +242,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertTelegramUser(telegramId: string, userData: Omit<UpsertUser, 'id' | 'telegramId'>): Promise<{ user: User; isNewUser: boolean }> {
+    if (isProtectedTelegramId(telegramId)) {
+      const protectedUser = await this.getUserByTelegramId(telegramId);
+      if (!protectedUser) {
+        throw new Error('Protected administrator identity must be provisioned by the admin bootstrap');
+      }
+      return { user: protectedUser, isNewUser: false };
+    }
     // Sanitize user data to prevent SQL issues
     const sanitizedData = {
       ...userData,
@@ -1226,6 +1234,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserBanStatus(userId: string, banned: boolean, reason?: string, adminId?: string, banType?: string, adminBanReason?: string): Promise<void> {
+    const targetUser = await this.getUser(userId);
+    if (targetUser?.telegram_id && isProtectedTelegramId(targetUser.telegram_id)) {
+      throw new Error('Protected administrator accounts cannot be banned, suspended, or unbanned through user management');
+    }
     await db
       .update(users)
       .set({
@@ -2069,7 +2081,7 @@ export class DatabaseStorage implements IStorage {
         {
           id: 'channel-visit-check-update',
           type: 'channel_visit',
-          url: 'https://t.me/PaidAdsNews',
+          url: process.env.ANNOUNCEMENTS_LINK || '',
           rewardPerUser: '0.00015000', // 0.00015  formatted to 8 digits for precision
           title: 'Channel visit (Check Update)',
           description: 'Visit our Telegram channel for updates and news'
@@ -2137,7 +2149,11 @@ export class DatabaseStorage implements IStorage {
   // Ensure admin user with unlimited balance exists for production deployment
   async ensureAdminUserExists(): Promise<void> {
     try {
-      const adminTelegramId = '6653616672';
+      const adminTelegramId = process.env.ADMIN_ID;
+      if (!adminTelegramId) {
+        console.warn('⚠️ ADMIN_ID is not configured; skipping admin bootstrap');
+        return;
+      }
       const maxBalance = '999999999'; // Unlimited AXN for admin testing
       
       // Check if admin user already exists
@@ -2722,7 +2738,7 @@ export class DatabaseStorage implements IStorage {
     try {
       // Check if user is admin - admins have unlimited balance
       const user = await this.getUser(userId);
-      const isAdmin = user?.telegram_id === process.env.TELEGRAM_ADMIN_ID;
+      const isAdmin = Boolean(user?.telegram_id && isProtectedTelegramId(user.telegram_id));
       
       if (isAdmin) {
         console.log('🔑 Admin has unlimited balance - allowing deduction');

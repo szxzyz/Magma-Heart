@@ -2,16 +2,16 @@ import crypto from "crypto";
 import { db, pool } from "./db";
 import { users, banLogs } from "../shared/schema";
 import { eq, and, ne, or, sql } from "drizzle-orm";
-import { config } from "./config";
+import { config, isProtectedTelegramId } from "./config";
 
-const ADMIN_TELEGRAM_ID = config.bot.adminId || process.env.TELEGRAM_ADMIN_ID || '';
+const ADMIN_TELEGRAM_ID = config.bot.adminId;
 
 async function isAdminUser(userId: string): Promise<boolean> {
   try {
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     if (!user) return false;
     
-    if (ADMIN_TELEGRAM_ID && user.telegram_id === ADMIN_TELEGRAM_ID) return true;
+    if (user.telegram_id && isProtectedTelegramId(user.telegram_id)) return true;
     
     return false;
   } catch (error) {
@@ -23,11 +23,11 @@ async function isAdminUser(userId: string): Promise<boolean> {
 async function isAdminTelegramId(telegramId: string): Promise<boolean> {
   if (!telegramId) return false;
   
-  if (ADMIN_TELEGRAM_ID && telegramId === ADMIN_TELEGRAM_ID) return true;
+  if (isProtectedTelegramId(telegramId)) return true;
   
   try {
     const [user] = await db.select().from(users).where(eq(users.telegram_id, telegramId));
-    if (user && ADMIN_TELEGRAM_ID && user.telegram_id === ADMIN_TELEGRAM_ID) return true;
+    if (user?.telegram_id && isProtectedTelegramId(user.telegram_id)) return true;
   } catch (error) {
     console.error("Error checking admin telegram ID:", error);
   }
@@ -214,7 +214,7 @@ export async function validateDeviceAndDetectDuplicate(
     // New account on existing device/IP - this is multi-account abuse
     // But first, check if any of the related accounts are admins - if so, don't flag as abuse
     const adminRelatedAccount = allRelatedUsers.find(
-      u => Boolean(ADMIN_TELEGRAM_ID && u.telegram_id === ADMIN_TELEGRAM_ID)
+      u => Boolean(u.telegram_id && isProtectedTelegramId(u.telegram_id))
     );
     
     if (adminRelatedAccount) {
@@ -232,7 +232,7 @@ export async function validateDeviceAndDetectDuplicate(
     // Filter out admin accounts from duplicate list
     const duplicateAccountIds = allRelatedUsers
       .filter(u => u.telegram_id !== telegramId && !u.banned && 
-        !(ADMIN_TELEGRAM_ID && u.telegram_id === ADMIN_TELEGRAM_ID))
+        !(u.telegram_id && isProtectedTelegramId(u.telegram_id)))
       .map(u => u.id);
 
     return {
@@ -397,7 +397,7 @@ export async function manualBanUser(
       throw new Error("User not found");
     }
 
-    if (ADMIN_TELEGRAM_ID && user.telegram_id === ADMIN_TELEGRAM_ID) {
+    if (user.telegram_id && isProtectedTelegramId(user.telegram_id)) {
       console.log(`🛡️ PROTECTED: Cannot manually ban admin user ${userId}`);
       throw new Error("Cannot ban admin accounts");
     }
@@ -619,7 +619,7 @@ export async function detectAdWatchingAbuse(
       // Find the primary account (oldest or marked as primary)
       // Admin accounts are always considered primary and protected
       const adminAccount = usersWithSameDevice.find(u => 
-        Boolean(ADMIN_TELEGRAM_ID && u.telegram_id === ADMIN_TELEGRAM_ID)
+        Boolean(u.telegram_id && isProtectedTelegramId(u.telegram_id))
       );
       const primaryAccount = adminAccount || usersWithSameDevice.find(u => u.isPrimaryAccount === true) ||
         usersWithSameDevice.reduce((oldest, current) => {
@@ -630,7 +630,7 @@ export async function detectAdWatchingAbuse(
 
       // If current user is not the primary and not an admin, they should be banned
       if (currentUser && currentUser.id !== primaryAccount.id) {
-        const isCurrentAdmin = Boolean(ADMIN_TELEGRAM_ID && currentUser.telegram_id === ADMIN_TELEGRAM_ID);
+        const isCurrentAdmin = Boolean(currentUser.telegram_id && isProtectedTelegramId(currentUser.telegram_id));
         
         if (isCurrentAdmin) {
           console.log(`🛡️ PROTECTED: Current user ${userId} is admin - not banning for multi-account`);
@@ -642,7 +642,7 @@ export async function detectAdWatchingAbuse(
           shouldBan: true,
           reason: "Multiple accounts detected watching ads from the same device. Only one account per device is allowed.",
           relatedAccountIds: usersWithSameDevice.filter(u => 
-            !(ADMIN_TELEGRAM_ID && u.telegram_id === ADMIN_TELEGRAM_ID)
+            !(u.telegram_id && isProtectedTelegramId(u.telegram_id))
           ).map(u => u.id)
         };
       }
@@ -695,6 +695,10 @@ export async function unbanUser(userId: string, unbannedBy: string): Promise<boo
     
     if (!user) {
       console.error("User not found for unban:", userId);
+      return false;
+    }
+    if (user.telegram_id && isProtectedTelegramId(user.telegram_id)) {
+      console.log(`🛡️ PROTECTED: Cannot modify protected administrator ${userId}`);
       return false;
     }
     

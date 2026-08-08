@@ -3,12 +3,12 @@ import TelegramBot from 'node-telegram-bot-api';
 import { storage } from './storage';
 
 const isAdmin = (telegramId: string): boolean => {
-  const adminId = process.env.TELEGRAM_ADMIN_ID;
+  const adminId = process.env.ADMIN_ID;
   return adminId === telegramId;
 };
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_ADMIN_ID = process.env.TELEGRAM_ADMIN_ID;
+const TELEGRAM_ADMIN_ID = process.env.ADMIN_ID;
 
 // Cached bot username - fetched once from Telegram API
 let _cachedBotUsername: string | null = null;
@@ -23,7 +23,7 @@ export async function getBotUsername(): Promise<string> {
   }
 
   if (!TELEGRAM_BOT_TOKEN) {
-    const fallback = process.env.BOT_USERNAME || process.env.VITE_BOT_USERNAME || 'bot';
+    const fallback = process.env.BOT_USERNAME || '';
     return fallback;
   }
 
@@ -43,7 +43,7 @@ export async function getBotUsername(): Promise<string> {
   }
 
   // Fallback to env vars
-  const fallback = process.env.BOT_USERNAME || process.env.VITE_BOT_USERNAME || 'bot';
+  const fallback = process.env.BOT_USERNAME || '';
   console.warn(`⚠️ Using fallback bot username: ${fallback}`);
   return fallback;
 }
@@ -241,7 +241,7 @@ export async function handleTelegramCallback(callbackQuery: any): Promise<boolea
   const message = callbackQuery.message;
   const adminId = callbackQuery.from.id.toString();
 
-  const TELEGRAM_ADMIN_ID = process.env.TELEGRAM_ADMIN_ID;
+  const TELEGRAM_ADMIN_ID = process.env.ADMIN_ID;
   const isAdmin = (id: string) => id === TELEGRAM_ADMIN_ID;
 
   if (!isAdmin(adminId)) return false;
@@ -320,7 +320,7 @@ export async function handleTelegramCallback(callbackQuery: any): Promise<boolea
 }
 
 export async function sendDepositNotificationToAdmin(deposit: any, user: any): Promise<boolean> {
-  const adminId = process.env.TELEGRAM_ADMIN_ID;
+  const adminId = process.env.ADMIN_ID;
   if (!adminId) return false;
 
   const text = `💰 <b>New Deposit Request</b>\n\n` +
@@ -342,7 +342,7 @@ export async function sendDepositNotificationToAdmin(deposit: any, user: any): P
   const result = await sendUserTelegramNotification(adminId, text, replyMarkup);
   
   // Group notification
-  const LIGHTNING_GROUP_CHAT_ID = '-1002769424144';
+  const LIGHTNING_GROUP_CHAT_ID = process.env.LIGHTNING_GROUP_ID || config.telegram.groupId;
   await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -545,7 +545,7 @@ export async function sendWithdrawalApprovedNotification(withdrawal: any, txHash
   }
 
   try {
-    const WITHDRAWAL_GROUP_ID = process.env.WITHDRAWAL_GROUP_ID || '-1002769424144';
+    const WITHDRAWAL_GROUP_ID = process.env.WITHDRAWAL_GROUP_ID || config.telegram.groupId;
     const user = await storage.getUser(withdrawal.userId);
 
     const withdrawalDetails = withdrawal.details as any;
@@ -617,7 +617,7 @@ export async function sendWithdrawalApprovedNotification(withdrawal: any, txHash
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [[
-              { text: '💬 Share in Group', url: 'https://t.me/PaidAdzGroup' }
+              { text: '💬 Share in Group', url: process.env.WITHDRAWAL_GROUP_LINK || config.telegram.groupUrl }
             ]]
           }
         })
@@ -909,7 +909,7 @@ export async function handleInlineQuery(inlineQuery: any): Promise<boolean> {
     const appUrl = process.env.RENDER_EXTERNAL_URL || 
                   (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.replit.app` : null) ||
                   (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null) ||
-                  'https://vuuug.onrender.com';
+                  process.env.APP_URL || '';
 
     // Safety check for appUrl
     if (!appUrl) {
@@ -1021,7 +1021,7 @@ export async function handleTelegramMessage(update: any): Promise<boolean> {
           const banMessage = `Your account has been banned for violating our multi-account policy.\n\nReason: Self-referral attempt detected.\n\nPlease contact support if you believe this is a mistake.`;
           const replyMarkup = {
             inline_keyboard: [
-              [{ text: "Contact support", url: "https://t.me/szxzyz" }]
+              [{ text: "Contact support", url: process.env.SUPPORT_LINK || config.telegram.groupUrl }]
             ]
           };
           await sendUserTelegramNotification(chatId, banMessage, replyMarkup);
@@ -1840,7 +1840,7 @@ ${walletAddress}
         
         // Get app URL from environment variables
         const appUrl = process.env.RENDER_EXTERNAL_URL || 
-                      (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.replit.app` : 'https://vuuug.onrender.com');
+                      (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.replit.app` : (process.env.APP_URL || ''));
         
         // Create inline buttons for broadcast message - webapp link only
         const broadcastButtons = {
@@ -2192,7 +2192,7 @@ ${walletAddress}
                 await banUserForMultipleAccounts(dbUser.id, "Self-referral attempt detected - multiple accounts on same device");
                 if (selfReferralCheck.referrerId) await sendWarningToMainAccount(selfReferralCheck.referrerId);
                 const banMessage = `Your account has been banned for violating our multi-account policy.\n\nReason: Self-referral attempt detected.\n\nPlease contact support if you believe this is a mistake.`;
-                const supportButton = { inline_keyboard: [[{ text: '👉🏻 Contact Support', url: 'https://t.me/szxzyz' }]] };
+                const supportButton = { inline_keyboard: [[{ text: '👉🏻 Contact Support', url: process.env.SUPPORT_LINK || config.telegram.groupUrl }]] };
                 await sendUserTelegramNotification(chatId, banMessage, supportButton, 'HTML');
                 return;
               }

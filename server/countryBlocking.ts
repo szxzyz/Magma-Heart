@@ -416,7 +416,7 @@ const BLOCKED_HTML = `<!DOCTYPE html>
 // Check if user is admin based on Telegram ID
 function isAdminUser(telegramId: string | null): boolean {
   if (!telegramId) return false;
-  const adminId = process.env.TELEGRAM_ADMIN_ID;
+  const adminId = process.env.ADMIN_ID;
   if (!adminId) return false;
   return adminId.toString() === telegramId.toString();
 }

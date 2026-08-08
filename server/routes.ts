@@ -364,14 +364,8 @@ function broadcastUpdate(update: any) {
 
 // Check if user is admin
 const isAdmin = (telegramId: string): boolean => {
-  const adminId = process.env.TELEGRAM_ADMIN_ID;
-  if (!adminId) {
-    console.warn('⚠️ TELEGRAM_ADMIN_ID not set - admin access disabled');
-    return false;
-  }
-  // Ensure both values are strings for comparison
-  const idStr = telegramId.toString();
-  return adminId.toString() === idStr;
+  const configuredIds = [process.env.ADMIN_ID, process.env.SUPER_ADMIN_ID].filter(Boolean);
+  return configuredIds.includes(telegramId.toString());
 };
 
 // Admin authentication middleware. Telegram signatures are mandatory for
@@ -380,11 +374,11 @@ const authenticateAdmin = async (req: any, res: any, next: any) => {
   try {
     const telegramData = req.headers['x-telegram-data'] || req.query.tgData;
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const adminId = process.env.TELEGRAM_ADMIN_ID;
+    const configuredAdminIds = [process.env.ADMIN_ID, process.env.SUPER_ADMIN_ID].filter(Boolean);
 
-    console.log(`🔍 Admin auth check: TELEGRAM_ADMIN_ID=${adminId}`);
+    console.log(`🔍 Admin auth check: ${configuredAdminIds.length} configured protected identities`);
 
-    if (!telegramData || !botToken || !adminId) {
+    if (!telegramData || !botToken || configuredAdminIds.length === 0) {
       console.log('❌ Admin auth failed: Telegram data, bot token, or admin ID is missing');
       return res.status(401).json({ message: "Admin access denied - verified Telegram authentication is required" });
     }
@@ -2452,7 +2446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { pool } = await import('./db');
       const userId = req.session?.user?.user?.id || req.user?.user?.id;
-      const adminTgId = process.env.TELEGRAM_ADMIN_ID || null;
+      const adminTgId = process.env.ADMIN_ID || null;
 
       const result = await pool.query(`
         SELECT
@@ -3117,10 +3111,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get app URL for WebApp button
-      const appUrl = process.env.RENDER_EXTERNAL_URL || 
+      const appUrl = process.env.APP_URL || process.env.RENDER_EXTERNAL_URL ||
                     (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.replit.app` : null) ||
-                    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null) ||
-                    'https://vuuug.onrender.com';
+                    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null) || '';
       
       // Build the referral URL using /start flow for reliable referral tracking
       const botUsername = await getBotUsername();
@@ -3339,7 +3332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           title: 'Channel visit (Check Update)',
           description: 'Visit our Telegram channel for updates and news',
           rewardPerUser: '0.00015000', // 8-decimal format to match live API
-          url: 'https://t.me/PaidAdsNews',
+          url: process.env.ANNOUNCEMENTS_LINK || config.telegram.channelUrl,
           limit: 100000,
           claimedCount: 0,
           status: 'active',
@@ -4311,7 +4304,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      const adminTelegramId = process.env.TELEGRAM_ADMIN_ID;
+      const adminTelegramId = process.env.ADMIN_ID;
       
       if (!botToken || !adminTelegramId) {
         console.error('❌ Self-unban failed: Missing bot token or admin ID config');
@@ -6258,12 +6251,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       // Send message with inline buttons to admin
-      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_ADMIN_ID) {
+      if (process.env.TELEGRAM_BOT_TOKEN && process.env.ADMIN_ID) {
         fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: process.env.TELEGRAM_ADMIN_ID,
+            chat_id: process.env.ADMIN_ID,
             text: adminMessage,
             parse_mode: 'HTML',
             reply_markup: inlineKeyboard
@@ -6275,7 +6268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Send notification to PaidAdzGroup for withdrawal requests (same format as admin notification)
       if (process.env.TELEGRAM_BOT_TOKEN) {
-        const PAIDADZ_GROUP_CHAT_ID = '-1003402950172';
+        const PAIDADZ_GROUP_CHAT_ID = process.env.PAIDADZ_GROUP_ID || config.telegram.groupId;
         // Use the exact same format as admin message
         const groupMessage = `💰 Withdrawal Request
 
@@ -6669,7 +6662,7 @@ ${walletAddress}
               // Notify admin via Telegram about send failure
               try {
                 const botToken = process.env.TELEGRAM_BOT_TOKEN;
-                const adminId = process.env.TELEGRAM_ADMIN_ID;
+                const adminId = process.env.ADMIN_ID;
                 if (botToken && adminId) {
                   await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
                     method: 'POST',
@@ -7284,7 +7277,7 @@ ${walletAddress}
       
       // Check the same configured admin identity used by the signed admin
       // middleware; never grant access to a hard-coded development account.
-      const configuredAdminId = process.env.TELEGRAM_ADMIN_ID;
+      const configuredAdminId = process.env.ADMIN_ID;
       const isConfiguredAdmin = Boolean(
         configuredAdminId && user?.telegram_id === configuredAdminId,
       );
@@ -7722,10 +7715,9 @@ ${walletAddress}
       const botUsername = await getBotUsername();
       const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
       
-      const appUrl = process.env.RENDER_EXTERNAL_URL || 
+      const appUrl = process.env.APP_URL || process.env.RENDER_EXTERNAL_URL ||
                     (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.replit.app` : null) ||
-                    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null) ||
-                    'https://vuuug.onrender.com';
+                    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null) || '';
 
       const shareImageUrl = `${appUrl}/images/share_v5.jpg`;
       const webAppUrl = referralLink;
@@ -8796,7 +8788,7 @@ ${walletAddress}
 
       // Notify admin via Telegram
       try {
-        const adminTgId = process.env.TELEGRAM_ADMIN_ID;
+        const adminTgId = process.env.ADMIN_ID;
         if (adminTgId && newTaskId) {
           const userRes = await pool.query(`SELECT username, telegram_id FROM users WHERE id = $1`, [userId]);
           const u = userRes.rows[0];
@@ -9262,8 +9254,8 @@ ${walletAddress}
       if (!axnAmount || axnAmount < 1000) return res.status(400).json({ message: 'Minimum withdrawal is 1,000 AXN' });
 
       // Server-side time lock: withdraw only open 10 PM–midnight IST (16:30–18:30 UTC)
-      // Admin (TELEGRAM_ADMIN_ID) is exempt from the time lock
-      const adminTelegramId = process.env.TELEGRAM_ADMIN_ID;
+      // Configured admin is exempt from the time lock
+      const adminTelegramId = process.env.ADMIN_ID;
       const isAdminUser = adminTelegramId && user.telegram_id === adminTelegramId;
       if (!isAdminUser) {
         const now = new Date();
@@ -9448,7 +9440,7 @@ ${walletAddress}
           const u = userRow.rows[0];
           const telegramId = u?.telegram_id;
           const botToken = process.env.TELEGRAM_BOT_TOKEN;
-          const WITHDRAWAL_GROUP_ID = process.env.WITHDRAWAL_GROUP_ID || '-1002769424144';
+          const WITHDRAWAL_GROUP_ID = process.env.WITHDRAWAL_GROUP_ID || config.telegram.groupId;
           const shortAddr = claim.wallet_address.length > 10
             ? `${claim.wallet_address.slice(0, 4)}...${claim.wallet_address.slice(-4)}`
             : claim.wallet_address;
@@ -9467,7 +9459,7 @@ ${walletAddress}
                   chat_id: telegramId,
                   text: `✅ <b>Withdrawal Completed!</b>\n\nYour withdrawal of <b>${amountStr} AXN</b> has been sent to your TON wallet.\n🌐 Wallet: <code>${shortAddr}</code>\n🔗 Tx Hash: <code>${result.txHash}</code>`,
                   parse_mode: 'HTML',
-                  reply_markup: { inline_keyboard: [[{ text: '💬 Share in Group', url: 'https://t.me/PaidAdzGroup' }]] }
+                  reply_markup: { inline_keyboard: [[{ text: '💬 Share in Group', url: process.env.WITHDRAWAL_GROUP_LINK || config.telegram.groupUrl }]] }
                 })
               });
             }
@@ -9584,7 +9576,7 @@ async function startTonPoller() {
             const u = userRow.rows[0];
             const telegramId = u?.telegram_id;
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
-            const WITHDRAWAL_GROUP_ID = process.env.WITHDRAWAL_GROUP_ID || '-1002769424144';
+            const WITHDRAWAL_GROUP_ID = process.env.WITHDRAWAL_GROUP_ID || config.telegram.groupId;
             const shortAddr = claim.wallet_address.length > 10
               ? `${claim.wallet_address.slice(0, 4)}...${claim.wallet_address.slice(-4)}`
               : claim.wallet_address;
@@ -9605,7 +9597,7 @@ async function startTonPoller() {
                     chat_id: telegramId,
                     text: `✅ <b>Withdrawal Completed!</b>\n\nYour withdrawal of <b>${amountStr} AXN</b> has been sent to your TON wallet.\n🌐 Wallet: <code>${shortAddr}</code>\n🔗 Tx Hash: <code>${sendResult.txHash}</code>\n\nThanks for using Axionet!`,
                     parse_mode: 'HTML',
-                    reply_markup: { inline_keyboard: [[{ text: '💬 Share in Group', url: 'https://t.me/PaidAdzGroup' }]] }
+                    reply_markup: { inline_keyboard: [[{ text: '💬 Share in Group', url: process.env.WITHDRAWAL_GROUP_LINK || config.telegram.groupUrl }]] }
                   }),
                 });
               }
@@ -9637,7 +9629,7 @@ async function startTonPoller() {
           // Notify admin
           try {
             const botToken = process.env.TELEGRAM_BOT_TOKEN;
-            const adminId = process.env.TELEGRAM_ADMIN_ID;
+            const adminId = process.env.ADMIN_ID;
             if (botToken && adminId) {
               await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
                 method: 'POST',

@@ -305,7 +305,7 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
         
         return res.status(403).json({ 
           banned: true,
-          message: "Your account has been banned for violating our multi-account policy. Only one account per device is allowed. Contact support: https://t.me/szxzyz",
+          message: `Your account has been banned for violating our multi-account policy. Only one account per device is allowed. Contact support: ${process.env.SUPPORT_LINK || ""}`,
           reason: deviceValidation.reason,
           banType: 'system'
         });
@@ -337,7 +337,7 @@ export const authenticateTelegram: RequestHandler = async (req: any, res, next) 
         banned: true,
         message: upsertedUser.banType === 'admin'
           ? "Your account has been disabled by admin."
-          : "Your account has been banned due to suspicious multi-account activity. Contact support: https://t.me/szxzyz",
+          : `Your account has been banned due to suspicious multi-account activity. Contact support: ${process.env.SUPPORT_LINK || ""}`,
         reason: upsertedUser.bannedReason || "Account banned",
         banType: (upsertedUser as any).banType || 'system',
         adminBanReason: (upsertedUser as any).adminBanReason || null
