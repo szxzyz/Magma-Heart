@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, useInView, useScroll, useTransform, useMotionValue, useSpring } from "framer-motion";
 
-const BOT_LINK = "https://t.me/Axionetbot/MyWAdz";
+const BOT_LINK = import.meta.env.VITE_BOT_LINK || "";
 const LINKS = {
-  announcements: "https://t.me/LightningSatoshi",
-  community: "https://t.me/Axionetchat",
-  bot: "https://t.me/Axionetbot/MyWAdz",
+  announcements: import.meta.env.VITE_CHANNEL_LINK || "",
+  community: import.meta.env.VITE_GROUP_LINK || "",
+  bot: import.meta.env.VITE_BOT_LINK || "",
 };
 
 function useReveal(margin = "-100px") {
